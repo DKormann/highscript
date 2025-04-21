@@ -53,7 +53,9 @@ instance {a} : ToVar (Var a) a where make v := v
 class ToExpr (t: Type) (b:Ty) where make : t → Expr b
 instance : ToExpr (Expr b) b where make e := e
 instance : ToExpr Nat int where make n := Expr.intlit n
-instance : ToExpr String string where make n := Expr.stringlit n
+-- instance : ToExpr String string where make n := Expr.stringlit n
+instance : ToExpr String b where make n := Expr.var (Var.mk n)
+
 -- instance : ToExpr (Var a) a where make v := Expr.var v
 instance : ToExpr (Var int) int where make v := Expr.var v
 instance {a b} [ToExpr a b] : ToExpr (Option a) (option b) where make o := match o with
@@ -68,8 +70,8 @@ instance [ToExpr a b] : ToExpr (List a) (Ty.list b) where make o := (lExpr o)
 def eval  (x:Expr r) := match x with
   | Expr.var v => v.name
   | Expr.intlit n => toString n
-  | Expr.stringlit s => s
-  | Expr.lam p b => s!"λ{p.name}. {eval b}"
+  | Expr.stringlit s => s!"\"{s}\""
+  | Expr.lam p b => s!"(λ{p.name}.{eval b})"
   | Expr.app f x => s!"({eval f} {eval x})"
 
   | Expr.sup l x y => s!"&{l}\{{eval x} {eval y}}"
@@ -89,6 +91,14 @@ def eval  (x:Expr r) := match x with
 
 notation "(" a "•" b ")" => Expr.app a (ToExpr.make b)
 
+
+def as (t:Ty) (e:Expr t) := e
+
+infixl:56 ":" => as
+infixl:56 "->" => Ty.arrow
+
+abbrev str := Expr.stringlit
+
 def lam {a b} [ToVar a ta] [ToExpr b tb] (x: a) (e: b) : Expr (arrow ta tb) :=
   Expr.lam (ToVar.make x) (ToExpr.make e)
 
@@ -96,38 +106,44 @@ def app {ta tb} {b} [ToExpr b ta] (f: (Expr (arrow ta tb))) (x: b) :=
   let fn : Expr (arrow ta tb) := ToExpr.make f
   Expr.app fn (ToExpr.make x)
 
+def sup (l:Nat) (x:X) (y:Y) [ToExpr X t] [ToExpr Y t] : Expr t :=
+  let x' := ToExpr.make x
+  let y' := ToExpr.make y
+  Expr.sup l x' y'
 
-abbrev INT := Expr int
+-- def && := su
 
-def ii := INT
-
-def arro a b := Expr (arrow a b)
-
-def as (t:Ty) (e:Expr t) := e
-
-infixl:56 ":" => as
-infixl:56 "->" => Ty.arrow
-
-
-
+notation:50 "&&" l "{" a " * " b "}" => ( a+b)
 
 #eval
-  let x: Var int := ⟨"x"⟩
 
-  let somi: Expr (option int) := Expr.some (Expr.intlit 22)
+  let x: Var int := ⟨ "x" ⟩
+  let y:= @Var.mk int "y"
+  let xx := int : Expr.var ⟨"x"⟩
 
-  let mmatchi : Expr int := (ToMatch.make (somi, Expr.intlit 33, x, Expr.var x))
+  let somi:= (option int) : Expr.some (Expr.intlit 22)
 
-  let lsi :Expr (list int) := (ToExpr.make [22, 33, 44])
+  let mmatchi := int : (ToMatch.make (somi, Expr.intlit 33, x, Expr.var x))
 
-  let fn := (int -> int) : lam x (Expr.var x)
+  let lsi  := (list int) : (ToExpr.make [22, 33, 44])
 
-  let l2 := (int -> int) : lam x x
+  let fn := (int -> int) : lam x x
+
+  let l2 := (int -> int) : lam "x" x
+
+  let l3 := (int -> int) : lam "t" 22
 
   let ap := app fn x
 
-  let ap2 : ii := app fn x
+  let iden {a} :=
+    let x : Var a := ⟨"x"⟩
+    (a -> a) : (lam x (Expr.var x))
 
+  -- let ap1 := int : app iden xx
+  let ap1s := string : app iden (str "hello")
 
+  let ap2 := int : app fn xx
 
-  eval ap
+  let ss := int: sup 1 3 3
+
+  eval ap1s
