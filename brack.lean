@@ -19,42 +19,61 @@ inductive Expr: Ty -> Type
   | some : Expr a → Expr (option a)
   | nil : Expr (list a)
   | cons : Expr a → Expr (list a) → Expr (list a)
+  | astype : (t:Ty) → Expr t → Expr t
 
--- declare Expr grammar parse trees
+
+def compile (e:Expr t) : String := match e with
+  | Expr.int n => toString n
+  | Expr.string s => s
+  | Expr.add x y => compile x ++ " + " ++ compile y
+  | Expr.leaf => "leaf"
+  | Expr.var n => n
+  | Expr.none => "none"
+  | Expr.some x => "some(" ++ compile x ++ ")"
+  | Expr.nil => "nil"
+  | Expr.cons x xs => "cons(" ++ compile x ++ ", " ++ compile xs ++ ")"
+  | Expr.astype t x => "astype(" ++ compile x ++ ")"
+
+
+
 declare_syntax_cat brack
 syntax num : brack
 syntax str : brack
 syntax:60 brack:60 " + " brack:61 : brack
-syntax "bottom" : brack
+syntax "leaf" : brack
 syntax "#" term "#" : brack
 syntax "(" brack ")" : brack
 syntax "none" : brack
 syntax "some(" brack ")" : brack
 syntax "nil" : brack
 syntax "cons(" brack "," brack ")" : brack
+syntax:50 brack:50 "as" term:51 : brack
 
 
-syntax "`[Expr| " brack "]" : term
+
+syntax "`[ " brack "]" : term
 macro_rules
-  | `(`[Expr| $x:str]) => `(Expr.string $x)
-  | `(`[Expr| $x:num]) => `(Expr.int $x)
-  | `(`[Expr| $x + $y]) => `(Expr.add `[Expr| $x] `[Expr| $y])
-  | `(`[Expr| bottom]) => `(Expr.leaf)
-  | `(`[Expr| #$x#]) => pure x
-  | `(`[Expr| ($x:brack) ]) => `(`[Expr| $x])
-  | `(`[Expr| none]) => `(Expr.none)
-  | `(`[Expr| some($x:brack)]) => `(Expr.some `[Expr| $x])
-  | `(`[Expr| nil]) => `(Expr.nil)
-  | `(`[Expr| cons($x:brack, $y:brack)]) => `(Expr.cons `[Expr| $x] `[Expr| $y])
+  | `(`[ $x:str]) => `(Expr.string $x)
+  | `(`[ $x:num]) => `(Expr.int $x)
+  | `(`[ $x + $y]) => `(Expr.add `[ $x] `[ $y])
+  | `(`[ leaf]) => `(Expr.leaf)
+  | `(`[ #$x#]) => pure x
+  | `(`[ ($x:brack) ]) => `(`[ $x])
+  | `(`[ none]) => `(Expr.none)
+  | `(`[ some($x:brack)]) => `(Expr.some `[ $x])
+  | `(`[ nil]) => `(Expr.nil)
+  | `(`[ cons($x:brack, $y:brack)]) => `(Expr.cons `[ $x] `[ $y])
+  | `(`[ $y:brack as $x]) => `( Expr.astype $x `[ $y])
 
 
 
 
 -- #eval
-#eval `[Expr| 1 + 2]
+#eval compile `[ 1 + 2]
 #eval
-  let x: Expr int := `[Expr| bottom]
-  -- let y: Expr string := `[Expr| bottom]
-  let s:= `[Expr| #x# + #x#]
-  let l:= `[Expr| cons(1 + 2, cons(2, nil))]
-  l
+  let x: Expr int := `[ leaf]
+  let y: Expr string := `[ leaf]
+  let s:= `[ #x# + #x#]
+  let l:= `[ cons(1 + 2, cons(2, nil))]
+  let o:= `[ leaf as int ]
+  compile l
