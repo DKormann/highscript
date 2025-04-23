@@ -22,6 +22,9 @@ inductive Expr : Ty → Type
 | as (t: Ty) (x: Expr t) : Expr t
 | ftag : String -> (s:Ty) -> Expr s
 | fn: String -> Expr s -> Expr s
+| sup : Nat -> (Expr t) -> (Expr t) -> Expr t
+| nsup : (Expr t) -> (Expr t) -> Expr t
+| dub : Nat -> (Var t) -> (Var t) -> (Expr t) -> (Expr t) -> Expr t
 
 
 def comp_term (fn:String) (e: Expr b) : String :=
@@ -34,6 +37,10 @@ def comp_term (fn:String) (e: Expr b) : String :=
   | Expr.as t x => comp_term fn x
   | Expr.ftag n t => "@" ++ n
   | Expr.fn n x => "@" ++ n
+  | Expr.sup l a b => s!"&{l}\{{comp_term fn a} {comp_term fn b}}"
+  | Expr.nsup a b => s!"&\{{comp_term fn a} {comp_term fn b}}}"
+  | Expr.dub l a b x y => s!"!&{l}\{{a.name} {b.name}} = {comp_term fn x} {comp_term fn y}"
+
 
 def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String String) :=
  match e with
@@ -43,6 +50,9 @@ def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String
   | Expr.lam _ b => collect b m
   | Expr.app f x => collect x (collect f m)
   | Expr.as _ x => collect x m
+  | Expr.sup _ a b => collect a (collect b m)
+  | Expr.nsup a b => collect a (collect b m)
+  | Expr.dub _ _ _ x y => collect x (collect y m)
   | e => m
 
 
@@ -63,15 +73,15 @@ instance : ToExpr (Expr b)  b where make e := e
 instance : ToExpr String b where make n := Expr.var (Var.mk n)
 instance : ToExpr (Var a) a where make v := Expr.var v
 
-def app {a b : Ty} (f : Expr (arrow a b)) (x : Expr a) : Expr b := Expr.app f x
+
+
+-- def app {a b : Ty} (f : Expr (arrow a b)) (x : Expr a) : Expr b := Expr.app f x
 
 abbrev fn (n:String) (e: Expr s) := Expr.fn n e
 
 def astype  (t:Ty) (x: Expr t): Expr t := x
 
 infixl:56 "->" => arrow
-infixl:56 "*" => Expr.app
-infixl:56 "•" => Expr.app
 
 
 def makelam (builder : (Expr a) -> Expr b) : Expr (arrow a b) :=
@@ -89,11 +99,30 @@ macro:50 "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := fn $
 macro:50 v:term:50 "as" t:term:51 : term => `(astype $t $v)
 macro:50  a:term:50 "(" b:term:50 ")" : term => `(Expr.app $a $b)
 
+macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := Var.mk $(Lean.quote (n.getId.toString)); $bod)
+
+macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" "=" c:term:50 ";" d:term:50 : term => `(Expr.dub $l $a $b $c $d)
+macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
+
+
 #eval
   let x := Expr.intlit 44 as int
   let f := lam x -> (x) as (int -> int)
   let main := fn "main" $ lam x -> (x) as (int -> int)
   compile main
+
+#eval
+  @main = &1 { Expr.intlit 1, Expr.intlit 2} as int;
+  compile main
+
+#eval
+
+  var x : int;
+  var y : int;
+  let ex :=  &1 { x, y} = Expr.intlit 3; (Expr.var x) as int
+  @main = ex;
+  compile main
+
 
 #eval
 
