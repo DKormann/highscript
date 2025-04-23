@@ -48,7 +48,7 @@ def collect {s: Ty} (e: Expr s t) (m: Std.HashMap String String) : (Std.HashMap 
 
 def compile (e: Expr s s) : String :=
   let m := collect e (Std.HashMap.empty)
-  let all_code := m.fold (init := "") (fun acc k v => acc ++ v ++ "\n")
+  let all_code := m.fold (init := "") (fun acc _ v => acc ++ v ++ "\n")
   all_code
 
 
@@ -74,18 +74,25 @@ infixl:56 ":" => as
 infixl:56 "*" => Expr.app
 infixl:56 "•" => Expr.app
 
-def lam (builder : (Expr s a) -> Expr s b) : Expr s (arrow a b) :=
+
+def makelam (builder : (Expr s a) -> Expr s b) : Expr s (arrow a b) :=
   let x: Var a := (Var.mk "x")
   let body := builder (Expr.var x)
   Expr.lam x body
 
+macro:100 "lam" x:ident "->" body:term : term =>
+  `(makelam fun $x => $body)
+
+
+
 #eval
 
-  let t :Expr (arrow int int) (arrow int int) := (lam fun x => (Expr.intlit 42))
-  comp_term "main" t
+  let g {s} : Expr s (int -> int) := (int -> int) : lam x -> (Expr.intlit 44)
 
-#eval
+  let main :=
+    (int->int) : fn "main"
 
-  let main := (int->int) : fn "main" (lam fun x => (self * (x)))
+      (lam x -> (self • (x)))
+
 
   compile main
