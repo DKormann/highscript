@@ -27,26 +27,26 @@ inductive Expr : Ty → Type
 | dub : Nat -> (Var t) -> (Var t) -> (Expr t) -> (Expr t) -> Expr t
 
 
-def comp_term (fn:String) (e: Expr b) : String :=
+def compile_term (fn:String) (e: Expr b) : String :=
   match e with
   | Expr.var v => v.name
   | Expr.intlit n => toString n
   | Expr.stringlit s => s
-  | Expr.lam p b => "λ" ++ p.name ++ "." ++ comp_term fn b
-  | Expr.app f x => "(" ++ comp_term fn f ++ " " ++ comp_term fn x ++ ")"
-  | Expr.as t x => comp_term fn x
+  | Expr.lam p b => "λ" ++ p.name ++ "." ++ compile_term fn b
+  | Expr.app f x => "(" ++ compile_term fn f ++ " " ++ compile_term fn x ++ ")"
+  | Expr.as t x => compile_term fn x
   | Expr.ftag n t => "@" ++ n
   | Expr.fn n x => "@" ++ n
-  | Expr.sup l a b => s!"&{l}\{{comp_term fn a} {comp_term fn b}}"
-  | Expr.nsup a b => s!"&\{{comp_term fn a} {comp_term fn b}}}"
-  | Expr.dub l a b x y => s!"!&{l}\{{a.name} {b.name}} = {comp_term fn x} {comp_term fn y}"
+  | Expr.sup l a b => s!"&{l}\{{compile_term fn a} {compile_term fn b}}"
+  | Expr.nsup a b => s!"&\{{compile_term fn a} {compile_term fn b}}}"
+  | Expr.dub l a b x y => s!"!&{l}\{{a.name} {b.name}} = {compile_term fn x} {compile_term fn y}"
 
 
 def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String String) :=
  match e with
   | Expr.fn n x =>
     let m := collect x m
-    if m.contains n then m else m.insert n $ "@" ++ n ++ " = " ++ comp_term n x
+    if m.contains n then m else m.insert n $ "@" ++ n ++ " = " ++ compile_term n x
   | Expr.lam _ b => collect b m
   | Expr.app f x => collect x (collect f m)
   | Expr.as _ x => collect x m
@@ -73,7 +73,7 @@ instance : ToExpr (Expr b)  b where make e := e
 instance : ToExpr String b where make n := Expr.var (Var.mk n)
 instance : ToExpr (Var a) a where make v := Expr.var v
 
-
+def expr {a b} [ToExpr a b] (x: a) : Expr b := ToExpr.make x
 
 -- def app {a b : Ty} (f : Expr (arrow a b)) (x : Expr a) : Expr b := Expr.app f x
 
@@ -82,6 +82,7 @@ abbrev fn (n:String) (e: Expr s) := Expr.fn n e
 def astype  (t:Ty) (x: Expr t): Expr t := x
 
 infixl:56 "->" => arrow
+
 
 
 def makelam (builder : (Expr a) -> Expr b) : Expr (arrow a b) :=
@@ -96,11 +97,13 @@ macro:100 "lam" x:ident "->" body:term:100 : term => `(makelam fun $x => $body)
 
 macro:50 "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
 macro:50 "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := fn $(Lean.quote (n.getId.toString)) $val; $body)
+macro:50 "#" n:num : term => `(Expr.intlit $n)
+macro:50 "#" n:str : term => `(Expr.stringlit $n)
+
 macro:50 v:term:50 "as" t:term:51 : term => `(astype $t $v)
 macro:50  a:term:50 "(" b:term:50 ")" : term => `(Expr.app $a $b)
 
 macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := Var.mk $(Lean.quote (n.getId.toString)); $bod)
-
 macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" "=" c:term:50 ";" d:term:50 : term => `(Expr.dub $l $a $b $c $d)
 macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
 
@@ -112,14 +115,15 @@ macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a 
   compile main
 
 #eval
-  @main = &1 { Expr.intlit 1, Expr.intlit 2} as int;
+  @main = &1 { #1, #2} as int;
   compile main
 
 #eval
 
   var x : int;
   var y : int;
-  let ex :=  &1 { x, y} = Expr.intlit 3; (Expr.var x) as int
+  let ex :=  &1 { x, y} = #3; (Expr.var x) as int
+  @hello = #"hello";
   @main = ex;
   compile main
 
@@ -129,9 +133,7 @@ macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a 
   @tt : int -> int;
   @tt = lam x -> (tt (x)) as (int -> int);
 
-  let d := Expr.intlit 22 as int;
-
+  let d := #22 as int;
 
   @main = tt;
-
   compile main
