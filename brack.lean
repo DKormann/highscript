@@ -1,6 +1,8 @@
 
 
 
+
+
 inductive Ty : Type
 | int
 | string

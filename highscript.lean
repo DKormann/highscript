@@ -34,7 +34,6 @@ inductive Expr : Ty → Type
   | nsup : (Expr t) -> (Expr t) -> Expr t
   | dub : Nat -> (Var u) -> (Var u) -> (Expr u) -> (Expr t) -> Expr t
 
-
 def compile_term (fn:String) (e: Expr b) : String :=
   match e with
   | Expr.var v => v.name
@@ -125,14 +124,10 @@ def Expr.linearize (e:Expr b) : Expr b × List String :=
   | k => (k,[])
 
 
-
 def compile {s} (e: Expr s) : String :=
-  let m := collect e (Std.HashMap.empty)
+  let m := collect (e.linearize).fst (Std.HashMap.empty)
   let all_code := m.fold (init := "") (fun acc _ v => acc ++ v ++ "\n")
   all_code
-
-
-
 
 
 class ToVar (t:Type) (b:Ty) where
@@ -191,18 +186,16 @@ macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a 
   var x : int;
   var y : int;
   let ex :=  &1 { x, y} = #3; (Expr.var x) as int
-  -- @hello = #"hello";
   @main = ex;
   compile main
 
 #eval
   @tt : int -> int;
   @tt = lam x -> (tt (x)) as (int -> int);
-  -- let d := #22 as int;
   @main = tt;
   compile main
 
 #eval
 
   @main = lam x -> ((lam y -> x as (int -> int)) (x));
-  compile (main.linearize.fst)
+  compile (main)
