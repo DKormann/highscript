@@ -8,7 +8,7 @@ highscript is a LEAN DSP that compiles to [HVM](https://github.com/HigherOrderCo
 
 features:
 
-[x] generate HVM
+ - [x] generate HVM
 
-[ ] Pattern matching
+ - [ ] Pattern matching
 
