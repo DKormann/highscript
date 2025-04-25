@@ -1,0 +1,10 @@
+name = "HighScript"
+version = "0.1.0"
+defaultTargets = ["highscript"]
+
+[[lean_lib]]
+name = "HighScript"
+
+[[lean_exe]]
+name = "highscript"
+root = "Main"
