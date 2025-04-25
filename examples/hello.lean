@@ -1,8 +1,6 @@
 import HighScript
 
 
-def main  : IO Unit := do
-
+def main :=
   @main = lam x -> x as (int -> int);
-
   runHVM main
