@@ -29,6 +29,7 @@ inductive Expr : Ty → Type
   | var : (v : Var t) → Expr t
   | intlit : Nat → Expr int
   | stringlit : String → Expr string
+  | arith : (op: String) -> Expr int -> Expr int -> Expr int
   | lam {a b : Ty} (param : Var a) (body : Expr b) : Expr (arrow a b)
   | app {a b : Ty} (f : Expr (arrow a b)) (x : Expr a) : Expr b
   | as (t: Ty) (x: Expr t) : Expr t
@@ -43,6 +44,7 @@ def compile_term (fn:String) (e: Expr b) : String :=
   | Expr.var v => v.name
   | Expr.intlit n => toString n
   | Expr.stringlit s => s
+  | Expr.arith op a b => s!"({op} {compile_term fn a} {compile_term fn b})"
   | Expr.lam p b => "λ" ++ p.name ++ " " ++ compile_term fn b
   | Expr.app f x => "(" ++ compile_term fn f ++ " " ++ compile_term fn x ++ ")"
   | Expr.as t x => compile_term fn x
@@ -52,9 +54,13 @@ def compile_term (fn:String) (e: Expr b) : String :=
   | Expr.nsup a b => s!"&\{{compile_term fn a} {compile_term fn b}}}"
   | Expr.dub l a b x y => s!"!&{l}\{{a.name} {b.name}} = {compile_term fn x} {compile_term fn y}"
 
-
 def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String String) :=
  match e with
+  | Expr.var v => m
+  | Expr.intlit n => m
+  | Expr.stringlit s => m
+  | Expr.ftag n t => m
+  | Expr.arith op a b => collect a (collect b m)
   | Expr.fn n x =>
     let m := collect x m
     if m.contains n then m else m.insert n $ "@" ++ n ++ " = " ++ compile_term n x
@@ -64,11 +70,12 @@ def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String
   | Expr.sup _ a b => collect a (collect b m)
   | Expr.nsup a b => collect a (collect b m)
   | Expr.dub _ _ _ x y => collect x (collect y m)
-  | e => m
+
 
 def Expr.replace (e:Expr b) (v: String) (v': String) : Expr b :=
   match e with
   | var x => if (x.name == v) then var (Var.mk v') else var x
+  | arith op a b => arith op (replace a v v') (replace b v v')
   | lam a b => if (a.name == v) then .lam a b else lam a (replace b v v')
   | app f x => app (replace f v v') (replace x v v')
   | fn n x => fn n (replace x v v')
@@ -80,6 +87,7 @@ def Expr.replace (e:Expr b) (v: String) (v': String) : Expr b :=
 def Expr.fmap {s} (e:Expr s) (f : {u:Ty} -> Expr u -> Expr u) : Expr s :=
   match e with
   | Expr.var v => f (Expr.var v)
+  | Expr.arith op a b => f (Expr.arith op (f a) (f b))
   | Expr.lam a b => f (Expr.lam a (f b))
   | Expr.app ff x => f (Expr.app (f ff) (f x))
   | Expr.as t x => f (Expr.as t (f x))
@@ -109,6 +117,8 @@ def Expr.linearize (e:Expr b) : Expr b × List String :=
 
   match e with
   | Expr.var x => (Expr.var x, [x.name])
+  | Expr.arith op a b =>
+    merger (a.linearize) (b.linearize) (fun a' b' => Expr.arith op a' b')
   | Expr.dub n a b x r =>
     let (x', xs) := x.linearize
     let xs := xs.removeAll ([a.name, b.name])
@@ -174,6 +184,10 @@ macro:50  a:term:50 "(" b:term:50 ")" : term => `(Expr.app $a $b)
 macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := newVar $(Lean.quote (n.getId.toString)); $bod)
 macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" "=" c:term:50 ";" d:term:50 : term => `(Expr.dub $l $a $b $c $d)
 macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
+macro:50  a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
+macro:50  a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
+macro:60  a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
+macro:60  a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
 
 
 macro "MyMacro" : term => `(Expr.intlit 22)

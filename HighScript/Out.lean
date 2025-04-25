@@ -6,4 +6,4 @@ def writeHVM (fn:String) (e: Expr s) :IO Unit := do
 
 def runHVM (e:Expr s) : IO Unit := do
   writeHVM "temp/script.hvm" e
-  IO.print (← IO.Process.output {cmd := "hvm", args := #["run", "script.hvm", "-C1"], }).stdout
+  IO.print (← IO.Process.output {cmd := "hvm", args := #["run", "temp/script.hvm", "-C1"], }).stdout

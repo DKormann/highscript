@@ -43,3 +43,5 @@ inductive Ma: (List Ty) -> (o:Ty) -> Type
     (Ma.cons (lam xs (intlit 33))
     Ma.nil)
   22
+
+  ∃∀L

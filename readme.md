@@ -16,8 +16,14 @@ highscript is a LEAN DSP that compiles to [HVM](https://github.com/HigherOrderCo
 
 ## installation
 
-  - install lean
+  - install [L∃∀N](https://leanprover-community.github.io/install/macos.html)
 
-  - clone the repo
+  - clone this repo
 
   - run `setup.sh`
+
+## usage
+
+see examples folder
+
+after successfull installation it should be possible to import HighScript in lean file and run script on HVM backend with runHVM command
