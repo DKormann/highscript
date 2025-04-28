@@ -29,8 +29,6 @@ def vxs : (x: List ((n:Nat) × Vec n)) → Vecs (Vmk (x.map (λ p => p.1)))
 def Vxs (x:List (List Nat)) := (vxs (vx x))
 
 
-
-
 #eval
   let x : Vecs (Vmk [2, 2, 3]) := Vxs [[2, 3], [2, 5], [2, 5, 7]]
   x
@@ -39,13 +37,10 @@ def Vxs (x:List (List Nat)) := (vxs (vx x))
 
 
 
-
 def langt : (Vec (2 * 2)) := Vmk [1, 2, 3, 4]
 
 def langtt := (Vecs (Vmk ([2, 2, 3].map (λ x => x * 2))))
 
-
--- structure Nwrap {t:Type} (n: t) where val := n
 
 inductive Tvar where
   | Rec : Tvar
@@ -55,19 +50,19 @@ structure Vari where
   name : String
   fields: List ((String) × Tvar)
 
-structure Dat where
-  name : String
-  fields : List Tvar
+structure Dat (fields: List Vari)
+
+def nil : Vari := {name := "nil", fields := []}
+def cons {a:Type} : Vari := {name := "cons", fields := [("head", Tvar.T a), ("tail", Tvar.Rec)]}
+def list (a) := Dat [nil, (@cons a)]
+def nlist := list Nat
 
 
-def acceptor (a b: Type) : Type := ∀ (_: a), b
+inductive swrap : (a:String) → Type | mk : (a:String) -> swrap a
 
-def sacceptor : (a : (List Type)) -> (b: Type) -> Type
-  | [], b => b
-  | a::as, b => sacceptor as (∀ (_: a), b)
+def acceptor (a b: Type) : Type := a->b
 
-def arith := sacceptor [Nat, Nat] Nat
-
-def fn : arith := λx y => x + y
 
 structure Arm (v: Vari) where
+  name : swrap v.name := swrap.mk v.name
+  fields : List
