@@ -29,6 +29,8 @@ inductive Ty where
   | arrow : Ty → Ty → Ty
   | data : (a: Adt) → Ty → Ty
 
+
+
 mutual
 
   inductive Ex : (t:Ty) -> Type where
@@ -47,6 +49,10 @@ mutual
 end
 
 open Ty
+
+
+infixl:56 "->" => arrow
+macro:100 adt:term:100 " [" t:term:100 "]" : term => `(data $adt $t)
 
 
 def Ctr : (a:Adt) -> (t:Ty) -> (var: List Tvar) -> Type
@@ -76,5 +82,5 @@ def PAIR {t} := mkctr pair t [Tvar.T, Tvar.T]
 
 def expair : inst pair int := PAIR (Ex.intlit 2) (Ex.intlit 3)
 
-def ex_exp_list: Ex (Ty.data list int) := Ex.data ex_cons
-def ex_pair2 : Ex (data pair (data list int)) := Ex.data (PAIR ex_exp_list ex_exp_list)
+def ex_exp_list: Ex (list [int]) := Ex.data ex_cons
+def ex_pair2 : Ex (pair[list[int]]) := Ex.data (PAIR ex_exp_list ex_exp_list)
