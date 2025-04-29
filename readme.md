@@ -11,6 +11,7 @@ highscript is a LEAN DSP that compiles to [HVM](https://github.com/HigherOrderCo
   - [x] simple type system
   - [x] linearize variables
   - [x] run HVM output
+  - [ ] support for custom ADT's
   - [ ] Pattern matching
 
 
