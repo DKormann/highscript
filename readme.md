@@ -28,3 +28,9 @@ highscript is a LEAN DSL that compiles to [HVM](https://github.com/HigherOrderCo
 see examples folder
 
 after successfull installation it should be possible to import HighScript in lean file and run script on HVM backend with runHVM command
+
+To run example which generates and runs HVM code
+```
+lean --run examples/fun_call.lean
+```
+

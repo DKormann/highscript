@@ -218,6 +218,3 @@ def MyConst := 22
 
   @main = lam x -> ((lam y -> x as (int -> int)) (x));
   compile (main)
-
-
-def TOTO := 123
