@@ -30,13 +30,21 @@ inductive Ty where
   | data : (a: Adt) → Ty → Ty
 
 
+open Ty
+
+
+infixl:56 "->" => arrow
+macro:100 adt:term:100 " [" t:term:100 "]" : term => `(data $adt $t)
+
 
 mutual
 
   inductive Ex : (t:Ty) -> Type where
     | intlit : Nat → Ex Ty.int
     | strlit : String → Ex Ty.string
-    | data : {adt: Adt} -> {t: Ty} -> (v: inst adt t) → Ex (Ty.data adt t)
+    | data : {adt: Adt} -> {t: Ty} -> (v: inst adt t) → Ex (adt[t])
+    | lam : (x: Ex t1) -> (y: Ex t2) -> Ex (t1 -> t2)
+    | app : (x: Ex (t1 -> t2)) -> (y: Ex t1) -> Ex t2
 
   inductive varinst : (a: Adt) -> (t:Ty) -> (v: List Tvar) -> Type
     | nil : varinst a t []
@@ -47,12 +55,6 @@ mutual
     | k : (data : varinst a t v ) -> inst a t
 
 end
-
-open Ty
-
-
-infixl:56 "->" => arrow
-macro:100 adt:term:100 " [" t:term:100 "]" : term => `(data $adt $t)
 
 
 def Ctr : (a:Adt) -> (t:Ty) -> (var: List Tvar) -> Type

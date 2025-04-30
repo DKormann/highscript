@@ -2,7 +2,7 @@
 
 [work in progress]
 
-highscript is a LEAN DSP that compiles to [HVM](https://github.com/HigherOrderCo/hvm3) code
+highscript is a LEAN DSL that compiles to [HVM](https://github.com/HigherOrderCo/hvm3) code
 
 ## features:
 

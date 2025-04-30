@@ -1,5 +1,5 @@
 
-import HighScript.DSP
+import HighScript.DSL
 
 def writeHVM (fn:String) (e: Expr s) :IO Unit := do
   (← IO.FS.Handle.mk fn IO.FS.Mode.write).putStr (compile e ++ "\n")
