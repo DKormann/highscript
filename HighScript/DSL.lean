@@ -165,8 +165,7 @@ infixl:56 "->" => arrow
 
 def makelam (tag:String) (builder : (Expr a) -> Expr b) : Expr (arrow a b) :=
   let x: Var a := (newVar tag)
-  let body := builder (Expr.var x)
-  Expr.lam x body
+  Expr.lam x $ builder (Expr.var x)
 
 def tag (n:String) : Expr s := Expr.ftag n s
 

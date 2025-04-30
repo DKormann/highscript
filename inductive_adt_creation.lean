@@ -19,14 +19,9 @@ inductive Tvar where
   | T : Tvar
 deriving DecidableEq
 
-
--- abbrev Adt := List (List Tvar)
-
 structure Adt where
   name: String
   Variants : List (List Tvar)
-  -- deriving DecidableEq
-
 
 inductive Ty where
   | int : Ty
@@ -88,3 +83,8 @@ def ex_pair2 : Expr (pair[list[int]]) := (PAIR ex_cons ex_cons)
 def option : Adt := ⟨"option", [[Tvar.T], []]⟩
 def SOME {t} := mkctr option t 0
 def NONE {t} := mkctr option t 1
+
+
+
+
+-- matching on ADTs
