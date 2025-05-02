@@ -72,7 +72,7 @@ mutual
     | nil : (e:Expr res) -> MatchCase r t [] res
     | T : (x: Var t) -> (rest: MatchCase r t xs res) -> MatchCase r t (Tvar.T::xs) res
     | R : (x: (Var r)) -> (rest: MatchCase r t xs res) -> MatchCase r t (Tvar.Rec::xs) res
-    | cons : (tv.choose (Var t) (Var r)) -> (MatchCase r t xs res) -> MatchCase r t (tv::xs) res
+
 
   inductive Match : (a:Adt) -> (vs:List Variant) -> (t:Ty) -> (res:Ty) -> Type
     | nil : Match a [] t res
@@ -80,13 +80,20 @@ mutual
 
 end
 
-
 mutual
 def VariantInst.compile : VariantInst a t v -> String
-  | VariantInst.nil => ""
-  | VariantInst.cons t x rest => compile_term x ++ ", " ++ rest.compile
+  | VariantInst.cons t x rest => compile_term x ++ " " ++ rest.compile
+  | _ => ""
 
--- def DataInst.compile
+def Match.compile : Match a vs t res -> String
+  | Match.nil => ""
+  | Match.cons x rest => s!"#{vs[0]!.fst}\{{x.compile} {rest.compile}"
+
+def MatchCase.compile : MatchCase r t v res -> String
+  | MatchCase.nil e => s!"}: {compile_term e}"
+  | MatchCase.T x rest => s!"{x.name} {rest.compile}"
+  | MatchCase.R x rest => s!"{x.name} {rest.compile}"
+
 
 def compile_term (e: Expr b) : String :=
   match e with
@@ -103,9 +110,11 @@ def compile_term (e: Expr b) : String :=
   | Expr.nsup a b => s!"&\{{compile_term a} {compile_term b}}}"
   | Expr.dub l a b x y => s!"!&{l}\{{a.name} {b.name}} = {compile_term x} {compile_term y}"
   | Expr.data a v => s!"{match v with | DataInst.k n d => s!"#{(a.Variants[n].fst)}\{{d.compile}}"}"
-  | Expr.matcher x m => s!"~{compile_term x}"
+  | Expr.matcher x m => s!"~({compile_term x})\{{m.compile}}"
 
 end
+
+
 
 def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String String) :=
  match e with
@@ -116,7 +125,8 @@ def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String
   | Expr.arith op a b => collect a (collect b m)
   | Expr.fn n x =>
     let m := collect x m
-    if m.contains n then m else m.insert n $ "@" ++ n ++ " = " ++ compile_term x
+    let n := "@" ++ n
+    if m.contains n then m else m.insert n $ n ++ " = " ++ compile_term x
   | Expr.lam _ b => collect b m
   | Expr.app f x => collect x (collect f m)
   | Expr.as _ x => collect x m
@@ -124,7 +134,9 @@ def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String
   | Expr.nsup a b => collect a (collect b m)
   | Expr.dub _ _ _ x y => collect x (collect y m)
 -- TODO:
-  | Expr.data a v => m
+  | Expr.data a v =>
+    let show_vari := fun (v:Variant) => s!"#{v.fst}\{{ " ".intercalate $ v.snd.map (fun t => (t.choose "x" "rec"))}}"
+    m.insert a.name $ s!"data {a.name} \{{" ".intercalate $ (a.Variants.map show_vari) }}"
   | Expr.matcher x mm => collect x m
 
 
@@ -295,5 +307,14 @@ def NIL := mkctr LIST int 1
 #eval compile_term NIL
 
 #eval
-  @main =CONS (Expr.intlit 22) NIL;
+  @main = CONS (Expr.intlit 22) NIL;
+  compile main
+
+#eval
+  let cc := CONS (Expr.intlit 22) NIL;
+  @main =
+    Expr.matcher cc ((mkmatch LIST int int)
+        ((mkcase LIST int int 0) (newVar "h") (newVar "t") (Expr.var $ newVar "h"))
+        ((mkcase LIST int int 1) (Expr.intlit 33))
+    );
   compile main
