@@ -7,8 +7,8 @@ deriving DecidableEq
 abbrev TT := Tvar.T
 abbrev RR := Tvar.Rec
 
-
-def Tvar.choose {a} (t:a) (r:a) : Tvar → a | Tvar.T => t | Tvar.Rec => r
+-- @[macro_inline]
+abbrev Tvar.choose {a} (t:a) (r:a) : Tvar → a | Tvar.T => t | Tvar.Rec => r
 
 def x  := Tvar.T.choose 1 2
 
@@ -29,8 +29,6 @@ macro:100 adt:term:100 " [" t:term:100 "]" : term => `(data $adt $t)
 
 structure Var (t:Ty) where name: String
 
-def list2prodt : (k: List Type) -> Type | [] => Unit | [x] => x | x::xs => x × (list2prodt xs)
-
 inductive definedList: (a:Type) -> (l: List a ) -> Type
   | nil : definedList a []
   | cons : (x: a) -> definedList a xs → definedList a (x::xs)
@@ -48,9 +46,7 @@ mutual
 
   inductive VariantInst : (a: Adt) -> (t:Ty) -> (v: List Tvar) -> Type
     | nil : VariantInst a t []
-    | T: (x: Expr t) -> (rest: VariantInst a t xs) -> VariantInst a t (Tvar.T::xs)
-    | R : (x: (Expr $ a[t])) -> (rest: VariantInst a t xs) -> VariantInst a t (Tvar.Rec::xs)
-    -- | cons : (tv:Tvar) -> (x: (Expr $ tv.choose t $ a[t] )) -> (rest: VariantInst a t xs) -> VariantInst a t (tv::xs)
+    | cons : (tv:Tvar) -> (x: (Expr $ tv.choose t $ a[t] )) -> (rest: VariantInst a t xs) -> VariantInst a t (tv::xs)
 
   inductive DataInst : (a : Adt) → (t:Ty) -> Type
     | k : (n:Fin a.Variants.length ) -> (data : VariantInst a t a.Variants[n]) -> DataInst a t
@@ -75,8 +71,9 @@ def Ctr : (a:Adt) -> (t:Ty) -> (var: List Tvar) -> Type
 
 def ctr : (a:Adt) -> (t:Ty) -> (v: List Tvar) -> ((VariantInst a t v) -> Expr (a[t])) -> (Ctr a t v)
   | _, _, [], f => (f VariantInst.nil)
-  | a, t, Tvar.T::xs, f => fun x => ctr a t xs fun v => f $ VariantInst.T  x v
-  | a, t, Tvar.Rec::xs, f => fun x => ctr a t xs fun v => f $ VariantInst.R x v
+  | a, t, Tvar.T::xs, f => fun x => ctr a t xs fun v => f $ VariantInst.cons Tvar.T x v
+  | a, t, Tvar.Rec::xs, f => fun x => ctr a t xs fun v => f $ VariantInst.cons Tvar.Rec x v
+
 
 def mkctr (a:Adt) (t) (n:Nat) (p:n<a.Variants.length := by decide): Ctr a t a.Variants[n] :=
   ctr a t a.Variants[n] fun v => Expr.data $ DataInst.k ⟨n,p⟩ v
@@ -87,7 +84,6 @@ def makelam (tag:String) (builder : (Expr a) -> Expr b) : Expr (arrow a b) :=
   Expr.lam x $ builder (Expr.var x)
 
 macro:100 "lam" x:ident "->" body:term:100 : term => `(makelam $(Lean.quote (x.getId.toString)) fun $x => $body)
-
 
 
 def CaseMaker (a t res: Ty) (vars : List Tvar) : (v:List Tvar) -> Type
@@ -130,7 +126,7 @@ def ccs := cm (newVar "h") (newVar "t") (Expr.intlit 2)
 
 
 def matcc := (mkmatch list int int)
-  ((mkcase list int int 0) (Expr.intlit 1))
-  ((mkcase list int int 1) (newVar "h" : Var (int)) (newVar "t") (Expr.intlit 2))
+  ((mkcase list int int 0) (Expr.intlit 22))
+  ((mkcase list int int 1) (newVar "h" : Var (int)) (newVar "t") (Expr.intlit 77))
 
 def matcv : Expr int := Expr.matcher lsi matcc

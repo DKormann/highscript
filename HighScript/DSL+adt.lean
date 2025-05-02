@@ -5,17 +5,33 @@ import Std.Data.HashMap
 
 set_option linter.unusedVariables false
 
+inductive Tvar where
+  | Rec : Tvar
+  | T : Tvar
+deriving DecidableEq
+
+
+abbrev TT := Tvar.T
+abbrev RR := Tvar.Rec
+abbrev Tvar.choose {a} (t:a) (r:a) : Tvar → a | Tvar.T => t | Tvar.Rec => r
+
+structure Adt where
+  name: String
+  Variants : List (List Tvar)
+
+
 inductive Ty
-| int
-| string
-| arrow: Ty-> Ty -> Ty
-| option: Ty -> Ty
+  | int
+  | string
+  | arrow: Ty -> Ty -> Ty
+  | data : (a: Adt) → Ty → Ty
 
 open Ty
--- export Ty (int string arrow option)
 
-structure Var (t: Ty) where
-name: String
+infixl:56 "->" => arrow
+macro:100 adt:term:100 " [" t:term:100 "]" : term => `(data $adt $t)
+
+structure Var (t: Ty) where name: String
 
 
 def newVar (s:String) : Var t := { name := s}
@@ -23,20 +39,43 @@ def Var.eq (v:Var t) (o:Var s) : Bool := v.name == o.name-- && v.num == o.num
 def Var.dup (v:Var t) : Var t × Var t := (⟨v.name++"1"⟩, ⟨v.name ++ "2"⟩)
 
 instance : Repr (Var t) where reprPrec v _ := s!"{v.name}"
+mutual
+  inductive Expr : Ty → Type
+    | var : (v : Var t) → Expr t
+    | intlit : Nat → Expr int
+    | stringlit : String → Expr string
+    | arith : (op: String) -> Expr int -> Expr int -> Expr int
+    | lam {a b : Ty} (param : Var a) (body : Expr b) : Expr (arrow a b)
+    | app {a b : Ty} (f : Expr (arrow a b)) (x : Expr a) : Expr b
+    | as (t: Ty) (x: Expr t) : Expr t
+    | ftag : String -> (s:Ty) -> Expr s
+    | fn: String -> Expr s -> Expr s
+    | sup : Nat -> (Expr t) -> (Expr t) -> Expr t
+    | nsup : (Expr t) -> (Expr t) -> Expr t
+    | dub : Nat -> (Var u) -> (Var u) -> (Expr u) -> (Expr t) -> Expr t
 
-inductive Expr : Ty → Type
-  | var : (v : Var t) → Expr t
-  | intlit : Nat → Expr int
-  | stringlit : String → Expr string
-  | arith : (op: String) -> Expr int -> Expr int -> Expr int
-  | lam {a b : Ty} (param : Var a) (body : Expr b) : Expr (arrow a b)
-  | app {a b : Ty} (f : Expr (arrow a b)) (x : Expr a) : Expr b
-  | as (t: Ty) (x: Expr t) : Expr t
-  | ftag : String -> (s:Ty) -> Expr s
-  | fn: String -> Expr s -> Expr s
-  | sup : Nat -> (Expr t) -> (Expr t) -> Expr t
-  | nsup : (Expr t) -> (Expr t) -> Expr t
-  | dub : Nat -> (Var u) -> (Var u) -> (Expr u) -> (Expr t) -> Expr t
+    | data : (adt: Adt) -> {t: Ty} -> (v: DataInst adt t) → Expr (adt[t])
+    | matcher : (x: Expr (a[t])) -> (Match a a.Variants t res) -> Expr res
+
+
+  inductive VariantInst : (a: Adt) -> (t:Ty) -> (v: List Tvar) -> Type
+    | nil : VariantInst a t []
+    | cons : (tv:Tvar) -> (x: (Expr $ tv.choose t $ a[t] )) -> (rest: VariantInst a t xs) -> VariantInst a t (tv::xs)
+
+  inductive DataInst : (a : Adt) → (t:Ty) -> Type
+    | k : (n:Fin a.Variants.length ) -> (data : VariantInst a t a.Variants[n]) -> DataInst a t
+
+  inductive MatchCase : (r:Ty) -> (t:Ty) -> (v: List Tvar) -> (res: Ty) -> Type
+    | nil : (e:Expr res) -> MatchCase r t [] res
+    | T : (x: Var t) -> (rest: MatchCase r t xs res) -> MatchCase r t (Tvar.T::xs) res
+    | R : (x: (Var r)) -> (rest: MatchCase r t xs res) -> MatchCase r t (Tvar.Rec::xs) res
+    | cons : (tv.choose (Var t) (Var r)) -> (MatchCase r t xs res) -> MatchCase r t (tv::xs) res
+
+  inductive Match : (a:Adt) -> (vs:List (List Tvar)) -> (t:Ty) -> (res:Ty) -> Type
+    | nil : Match a [] t res
+    | cons : (x: MatchCase (a[t]) t v res) -> (Match a xs t res) -> Match a (v::xs) t res
+
+end
 
 def compile_term (fn:String) (e: Expr b) : String :=
   match e with
@@ -52,6 +91,8 @@ def compile_term (fn:String) (e: Expr b) : String :=
   | Expr.sup l a b => s!"&{l}\{{compile_term fn a} {compile_term fn b}}"
   | Expr.nsup a b => s!"&\{{compile_term fn a} {compile_term fn b}}}"
   | Expr.dub l a b x y => s!"!&{l}\{{a.name} {b.name}} = {compile_term fn x} {compile_term fn y}"
+  | Expr.data a v => s!"#{a.name} \{}"
+  | Expr.matcher x m => s!"~{compile_term fn x}"
 
 def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String String) :=
  match e with
@@ -69,6 +110,9 @@ def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String
   | Expr.sup _ a b => collect a (collect b m)
   | Expr.nsup a b => collect a (collect b m)
   | Expr.dub _ _ _ x y => collect x (collect y m)
+-- TODO:
+  | Expr.data a v => m
+  | Expr.matcher x mm => collect x m
 
 
 def Expr.replace (e:Expr b) (v: String) (v': String) : Expr b :=
@@ -106,8 +150,7 @@ def resolve  {s} : List String -> Expr ta -> Expr tb -> (Expr ta -> Expr tb -> E
     let ex := @Expr.dub int s 0 (newVar c') (newVar c'') (Expr.var (newVar c)) ex
     ex
 
-
-def merger {s ta tb : Ty} : (Expr ta)× (List String) -> (Expr tb)×(List String) -> (Expr ta -> Expr tb -> Expr s) -> (Expr s) × (List String) := fun (a,as) (b,bs) fn =>
+def merger {s ta tb : Ty} : ((Expr ta) × (List String)) -> ((Expr tb) × (List String)) -> (Expr ta -> Expr tb -> Expr s) -> (Expr s) × (List String) := fun (a,as) (b,bs) fn =>
   let collisions := (as.filter (fun i => i ∈ bs))
   let res := resolve collisions a b fn
   (res, bs ++ as.removeAll collisions)
@@ -158,7 +201,7 @@ abbrev fn (n:String) (e: Expr s) := Expr.fn n e
 
 def astype  (t:Ty) (x: Expr t): Expr t := x
 
-infixl:56 "->" => arrow
+-- infixl:56 "->" => arrow
 
 def makelam (tag:String) (builder : (Expr a) -> Expr b) : Expr (arrow a b) :=
   let x: Var a := (newVar tag)
