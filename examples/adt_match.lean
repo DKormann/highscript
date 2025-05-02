@@ -127,3 +127,20 @@ def cm : CaseMaker (list[int]) int int cons cons := mkcase list int int 1
 
 def ccf : (Var int) -> (Var (list[int])) -> Expr int -> MatchCase (list[int]) int cons int := cm
 def ccs := cm (newVar "h") (newVar "t") (Expr.intlit 2)
+
+def MatchMaker (a:Adt) (t res:Ty): (varis:List (List Tvar)) -> Type
+  | [] => Match a (a.Variants) t res | vs::vss => (MatchCase (a[t]) t vs res) -> MatchMaker a t res vss
+
+def matchMaker (a:Adt) (t res:Ty): (varis:List (List Tvar)) -> (f: Match a varis t res -> Match a a.Variants t res) -> MatchMaker a t res varis
+  | [], f => (f Match.nil : Match a a.Variants t res)
+  | vs::vss, f => fun (cs:MatchCase (a[t]) t vs res) => matchMaker a t res vss fun m => f (Match.cons cs m)
+
+def mkmatch (a:Adt) (t res:Ty) : MatchMaker a t res (a.Variants) := matchMaker a t res (a.Variants) fun m => m
+
+
+
+def matcc := (mkmatch list int int)
+  ((mkcase list int int 0) (Expr.intlit 1))
+  ((mkcase list int int 1) (newVar "h") (newVar "t") (Expr.intlit 2))
+
+def matcv : Expr int := Expr.matcher lsi matcc
