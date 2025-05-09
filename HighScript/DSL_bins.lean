@@ -1,3 +1,10 @@
+
+
+-- work in progress ADT support for highscript
+-- the core functionality works. now just some macros
+-- then: stronger type safety
+
+
 import Std.Data.HashMap
 set_option linter.unusedVariables false
 
@@ -100,6 +107,7 @@ end
 @[match_pattern] def Expr.dub n (a b: Var t) e (res:Expr u) := Expr.binary (.dub n a b ) e res
 @[match_pattern] def Expr.int n := Expr.nullary (.intlit n)
 @[match_pattern] def Expr.string s := Expr.nullary (.stringlit s)
+@[match_pattern] def Expr.fn name (bod:Expr t):= Expr.unary (.fn name) bod
 
 mutual
 
@@ -325,3 +333,5 @@ def conscase := (mkcase LIST int int 0) (newVar "x") (newVar "tail") (.int 33)
 
 def lmatch := (mkmatch LIST int int) conscase css
 def matchex : Expr int := lmatch kk
+
+#eval compile $ .fn "main" matchex
