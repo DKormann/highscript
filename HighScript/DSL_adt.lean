@@ -56,14 +56,13 @@ mutual
     | sup : Nat -> (Expr t) -> (Expr t) -> Expr t
     | nsup : (Expr t) -> (Expr t) -> Expr t
     | dub : Nat -> (Var u) -> (Var u) -> (Expr u) -> (Expr t) -> Expr t
-
     | data : (adt: Adt) -> {t: Ty} -> (v: DataInst adt t) → Expr (adt[t])
     | matcher : (x: Expr (a[t])) -> (Match a a.Variants t res) -> Expr res
 
-
   inductive VariantInst : (a: Adt) -> (t:Ty) -> (v: List Tvar) -> Type
     | nil : VariantInst a t []
-    | cons : (tv:Tvar) -> (x: (Expr $ tv.choose t $ a[t] )) -> (rest: VariantInst a t xs) -> VariantInst a t (tv::xs)
+    | T : (t:Ty) -> (x: Expr t) -> (rest: VariantInst a t xs) -> VariantInst a t (Tvar.T::xs)
+    | R : (t:Ty) -> (x: (Expr $ a[t])) -> (rest: VariantInst a t xs) -> VariantInst a t (Tvar.Rec::xs)
 
   inductive DataInst : (a : Adt) → (t:Ty) -> Type
     | k : (n:Fin a.Variants.length ) -> (data : VariantInst a t a.Variants[n].snd) -> DataInst a t
@@ -73,7 +72,6 @@ mutual
     | T : (x: Var t) -> (rest: MatchCase r t xs res) -> MatchCase r t (Tvar.T::xs) res
     | R : (x: (Var r)) -> (rest: MatchCase r t xs res) -> MatchCase r t (Tvar.Rec::xs) res
 
-
   inductive Match : (a:Adt) -> (vs:List Variant) -> (t:Ty) -> (res:Ty) -> Type
     | nil : Match a [] t res
     | cons : (x: MatchCase (a[t]) t v.snd res) -> (Match a xs t res) → Match a (v::xs) t res
@@ -81,127 +79,159 @@ mutual
 end
 
 mutual
-def VariantInst.compile : VariantInst a t v -> String
-  | VariantInst.cons t x rest => compile_term x ++ " " ++ rest.compile
-  | _ => ""
 
-def Match.compile : Match a vs t res -> String
-  | Match.nil => ""
-  | Match.cons x rest => s!"#{vs[0]!.fst}\{{x.compile} {rest.compile}"
+  def VariantInst.compile : VariantInst a t v -> String
+    | VariantInst.T t x rest => Expr.compile x ++ " " ++ rest.compile
+    | VariantInst.R t x rest => Expr.compile x ++ " " ++ rest.compile
+    | _ => ""
 
-def MatchCase.compile : MatchCase r t v res -> String
-  | MatchCase.nil e => s!"}: {compile_term e}"
-  | MatchCase.T x rest => s!"{x.name} {rest.compile}"
-  | MatchCase.R x rest => s!"{x.name} {rest.compile}"
+  def Match.compile : Match a vs t res -> String
+    | Match.nil => ""
+    | Match.cons x rest => s!"#{vs[0]!.fst}\{{x.compile} {rest.compile}"
 
+  def MatchCase.compile : MatchCase r t v res -> String
+    | MatchCase.nil e => s!"}: {Expr.compile e}"
+    | MatchCase.T x rest => s!"{x.name} {rest.compile}"
+    | MatchCase.R x rest => s!"{x.name} {rest.compile}"
 
-def compile_term (e: Expr b) : String :=
-  match e with
-  | Expr.var v => v.name
-  | Expr.intlit n => toString n
-  | Expr.stringlit s => s
-  | Expr.arith op a b => s!"({op} {compile_term a} {compile_term b})"
-  | Expr.lam p b => "λ" ++ p.name ++ " " ++ compile_term b
-  | Expr.app f x => "(" ++ compile_term f ++ " " ++ compile_term x ++ ")"
-  | Expr.as t x => compile_term x
-  | Expr.ftag n t => "@" ++ n
-  | Expr.fn n x => "@" ++ n
-  | Expr.sup l a b => s!"&{l}\{{compile_term a} {compile_term b}}"
-  | Expr.nsup a b => s!"&\{{compile_term a} {compile_term b}}}"
-  | Expr.dub l a b x y => s!"!&{l}\{{a.name} {b.name}} = {compile_term x} {compile_term y}"
-  | Expr.data a v => s!"{match v with | DataInst.k n d => s!"#{(a.Variants[n].fst)}\{{d.compile}}"}"
-  | Expr.matcher x m => s!"~({compile_term x})\{{m.compile}}"
-
+  def Expr.compile (e: Expr b) : String :=
+    match e with
+    | Expr.var v => v.name
+    | Expr.intlit n => toString n
+    | Expr.stringlit s => s
+    | Expr.arith op a b => s!"({op} {Expr.compile a} {Expr.compile b})"
+    | Expr.lam p b => "λ" ++ p.name ++ " " ++ Expr.compile b
+    | Expr.app f x => "(" ++ Expr.compile f ++ " " ++ Expr.compile x ++ ")"
+    | Expr.as t x => Expr.compile x
+    | Expr.ftag n t => "@" ++ n
+    | Expr.fn n x => "@" ++ n
+    | Expr.sup l a b => s!"&{l}\{{Expr.compile a} {Expr.compile b}}"
+    | Expr.nsup a b => s!"&\{{Expr.compile a} {Expr.compile b}}}"
+    | Expr.dub l a b x y => s!"!&{l}\{{a.name} {b.name}} = {Expr.compile x} {Expr.compile y}"
+    | Expr.data a v => s!"{match v with | DataInst.k n d => s!"#{(a.Variants[n].fst)}\{{d.compile}}"}"
+    | Expr.matcher x m => s!"~({Expr.compile x})\{{m.compile}}"
 end
 
-
-
-def collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String String) :=
- match e with
-  | Expr.var v => m
-  | Expr.intlit n => m
-  | Expr.stringlit s => m
-  | Expr.ftag n t => m
-  | Expr.arith op a b => collect a (collect b m)
-  | Expr.fn n x =>
-    let m := collect x m
-    let n := "@" ++ n
-    if m.contains n then m else m.insert n $ n ++ " = " ++ compile_term x
-  | Expr.lam _ b => collect b m
-  | Expr.app f x => collect x (collect f m)
-  | Expr.as _ x => collect x m
-  | Expr.sup _ a b => collect a (collect b m)
-  | Expr.nsup a b => collect a (collect b m)
-  | Expr.dub _ _ _ x y => collect x (collect y m)
--- TODO:
-  | Expr.data a v =>
-    let show_vari := fun (v:Variant) => s!"#{v.fst}\{{ " ".intercalate $ v.snd.map (fun t => (t.choose "x" "rec"))}}"
-    m.insert a.name $ s!"data {a.name} \{{" ".intercalate $ (a.Variants.map show_vari) }}"
-  | Expr.matcher x mm => collect x m
-
-
-def Expr.replace (e:Expr b) (v: String) (v': String) : Expr b :=
+mutual
+  def Expr.collect {t} (e: Expr t) (m: Std.HashMap String String) : (Std.HashMap String String) :=
   match e with
-  | var x => if (x.name == v) then var (Var.mk v') else var x
-  | arith op a b => arith op (replace a v v') (replace b v v')
-  | lam a b => if (a.name == v) then .lam a b else lam a (replace b v v')
-  | app f x => app (replace f v v') (replace x v v')
-  | fn n x => fn n (replace x v v')
-  | sup n a b => sup n (replace a v v') (replace b v v')
-  | nsup a b => nsup (replace a v v') (replace b v v')
-  | dub n a b x y => Expr.dub n a b (if a.name == v ∨ b.name == v then x else (x.replace v v')) (y.replace v v')
+    | Expr.var v => m
+    | Expr.intlit n => m
+    | Expr.stringlit s => m
+    | Expr.ftag n t => m
+    | Expr.arith op a b => Expr.collect a (Expr.collect b m)
+    | Expr.fn n x =>
+      let m := Expr.collect x m
+      let n := "@" ++ n
+      if m.contains n then m else m.insert n $ n ++ " = " ++ Expr.compile x
+    | Expr.lam _ b => Expr.collect b m
+    | Expr.app f x => Expr.collect x (Expr.collect f m)
+    | Expr.as _ x => Expr.collect x m
+    | Expr.sup _ a b => Expr.collect a (Expr.collect b m)
+    | Expr.nsup a b => Expr.collect a (Expr.collect b m)
+    | Expr.dub _ _ _ x y => Expr.collect x (Expr.collect y m)
+    | Expr.data a v =>
+      let show_vari := fun (v:Variant) => s!"#{v.fst}\{{ " ".intercalate $ v.snd.map (fun t => (t.choose "x" "rec"))}}"
+      m.insert a.name $ s!"data {a.name} \{{" ".intercalate $ (a.Variants.map show_vari) }}"
+    | Expr.matcher x mm => Expr.collect x m
+
+def Expr.map {s} (e:Expr s) (f : {u:Ty} -> Expr u -> Expr u) : Expr s :=
+  match e with
+  | Expr.arith op a b =>  Expr.arith op (f a ) (f b )
+  | Expr.lam a b =>  Expr.lam a (f b)
+  | Expr.app l x =>  Expr.app (f l) (f x)
+  | Expr.as t x =>  Expr.as t (f x)
+  | Expr.fn n x =>  Expr.fn n (f x)
+  | Expr.sup n a b =>  Expr.sup n (f a) (f b)
+  | Expr.nsup a b =>  Expr.nsup (f a) (f b)
+  | Expr.dub n a b x y =>  Expr.dub n a b (f x) (f y)
   | k => k
 
 def Expr.fmap {s} (e:Expr s) (f : {u:Ty} -> Expr u -> Expr u) : Expr s :=
   match e with
-  | Expr.var v => f (Expr.var v)
-  | Expr.arith op a b => f (Expr.arith op (f a) (f b))
-  | Expr.lam a b => f (Expr.lam a (f b))
-  | Expr.app ff x => f (Expr.app (f ff) (f x))
-  | Expr.as t x => f (Expr.as t (f x))
-  | Expr.fn n x => f (Expr.fn n (f x))
-  | Expr.ftag n t => f (Expr.ftag n t)
-  | Expr.sup n a b => f (Expr.sup n (f a) (f b))
-  | Expr.nsup a b => f (Expr.nsup (f a) (f b))
-  | Expr.dub n a b x y => f (Expr.dub n a b (f x) (f y))
+  | Expr.arith op a b => f $ Expr.arith op (a.fmap f) (b.fmap f)
+  | Expr.lam a b => f $ Expr.lam a (b.fmap f)
+  | Expr.app ff x => f $ Expr.app (ff.fmap f) (x.fmap f)
+  | Expr.as t x => f $ Expr.as t (x.fmap f)
+  | Expr.fn n x => f $ Expr.fn n (x.fmap f)
+  | Expr.sup n a b => f $ Expr.sup n (a.fmap f) (b.fmap f)
+  | Expr.nsup a b => f $ Expr.nsup (a.fmap f) (b.fmap f)
+  | Expr.dub n a b x y => f $ Expr.dub n a b (x.fmap f) (y.fmap f)
+  | k => f k
+
+end
+
+
+mutual
+
+def VariantInst.replace (v:VariantInst a t vs) (old: String) (new: String) : (VariantInst a t vs) :=
+  VariantInst.fmap v (fun x => x.replace old new)
+
+-- instance : VarContainer (VariantInst a t vs) where
+--   replace v old new := VariantInst.fmap v (fun x => VarContainer.replace x old new)
+
+def Expr.replace (e:Expr b) (v: String) (v': String) : Expr b :=
+  match e with
+  | .lam a b => if (a.name == v) then .lam a b else .lam a (.replace b v v')
+  | .var x => if (x.name == v) then .var (Var.mk v') else .var x
+  | .arith op a b => .arith op (.replace a v v') (.replace b v v')
+  | .app f x => .app (.replace f v v') (.replace x v v')
+  | .fn n x => .fn n (.replace x v v')
+  | .sup n a b => .sup n (.replace a v v') (.replace b v v')
+  | .nsup a b => .nsup (.replace a v v') (.replace b v v')
+  | .dub n a b x y => .dub n a b (if a.name == v ∨ b.name == v then x else (x.replace v v')) (y.replace v v')
   | k => k
 
-def resolve  {s} : List String -> Expr ta -> Expr tb -> (Expr ta -> Expr tb -> Expr s) -> Expr s := fun c a b fn =>
-  match c with
-  | [] => fn a b
-  | c::cs =>
-    let (c', c'') := (c ++ "1", c ++ "2")
-    let ex := resolve cs (a.replace c c') (b.replace c c'') fn
-    let ex := @Expr.dub int s 0 (newVar c') (newVar c'') (Expr.var (newVar c)) ex
-    ex
-
-def merger {s ta tb : Ty} : ((Expr ta) × (List String)) -> ((Expr tb) × (List String)) -> (Expr ta -> Expr tb -> Expr s) -> (Expr s) × (List String) := fun (a,as) (b,bs) fn =>
-  let collisions := (as.filter (fun i => i ∈ bs))
-  let res := resolve collisions a b fn
-  (res, bs ++ as.removeAll collisions)
-
-def Expr.linearize (e:Expr b) : Expr b × List String :=
-
-  match e with
-  | Expr.var x => (Expr.var x, [x.name])
-  | Expr.arith op a b =>
-    merger (a.linearize) (b.linearize) (fun a' b' => Expr.arith op a' b')
-  | Expr.dub n a b x r =>
+def VariantInst.linearize (v:VariantInst a t vs) : (VariantInst a t vs) × List String :=
+  match v with
+  | .nil => (VariantInst.nil, [])
+  | .T t x rest =>
     let (x', xs) := x.linearize
-    let xs := xs.removeAll ([a.name, b.name])
-    merger (x', xs) (r.linearize) (fun x'' r'' => Expr.dub n a b x'' r'')
-  | Expr.lam a bod =>
-    let (b', bs) := bod.linearize
-    let bs := bs.filter (fun i => i != a.name)
-    (Expr.lam a b', bs)
-  | .app a b => merger a.linearize b.linearize (fun a' b' => Expr.app a' b')
-  | .as t x => x.linearize
-  | .fn n x =>
-    let (x', xs) := x.linearize
-    (Expr.fn n x', xs)
-  | .sup n a b => merger a.linearize b.linearize (fun a' b' => Expr.sup n a' b')
-  | .nsup a b => merger a.linearize b.linearize (fun a' b' => Expr.nsup a' b')
-  | k => (k,[])
+    let (r', rs) := rest.linearize
+    let collisions := (xs.filter (. ∈ rs))
+    sorry
+  | .R t x rest => sorry
+
+
+  def resolve  {s} : List String -> ta -> tb -> (ta -> tb -> s) -> s := fun c a b fn =>
+    match c with
+    | [] => fn a b
+    | c::cs =>
+      let (c', c'') := (c ++ "1", c ++ "2")
+      let ex := resolve cs (a.replace c c') (b.replace c c'') fn
+      let ex := @Expr.dub int s 0 (newVar c') (newVar c'') (Expr.var (newVar c)) ex
+      ex
+
+  def merger {s ta tb : Ty} : ((Expr ta) × (List String)) -> ((Expr tb) × (List String)) -> (Expr ta -> Expr tb -> Expr s) -> (Expr s) × (List String) := fun (a,as) (b,bs) fn =>
+    let collisions := (as.filter (fun i => i ∈ bs))
+    let res := resolve collisions a b fn
+    (res, bs ++ as.removeAll collisions)
+
+  def Expr.linearize (e:Expr b) : Expr b × List String :=
+
+    match e with
+    | Expr.var x => (Expr.var x, [x.name])
+    | Expr.arith op a b =>
+      merger (a.linearize) (b.linearize) (fun a' b' => Expr.arith op a' b')
+    | Expr.dub n a b x r =>
+      let (x', xs) := x.linearize
+      let xs := xs.removeAll ([a.name, b.name])
+      merger (x', xs) (r.linearize) (fun x'' r'' => Expr.dub n a b x'' r'')
+    | Expr.lam a bod =>
+      let (b', bs) := bod.linearize
+      let bs := bs.filter (fun i => i != a.name)
+      (Expr.lam a b', bs)
+    | .app a b => merger a.linearize b.linearize (fun a' b' => Expr.app a' b')
+    | .as t x => x.linearize
+    | .fn n x =>
+      let (x', xs) := x.linearize
+      (Expr.fn n x', xs)
+    | .sup n a b => merger a.linearize b.linearize (fun a' b' => Expr.sup n a' b')
+    | .nsup a b => merger a.linearize b.linearize (fun a' b' => Expr.nsup a' b')
+    | k => (k,[])
+
+end
+
 
 def compile {s} (e: Expr s) : String :=
   let m := collect (e.linearize).fst (Std.HashMap.empty)
@@ -238,8 +268,8 @@ def Ctr : (a:Adt) -> (t:Ty) -> (var: List Tvar) -> Type
 
 def ctr : (a:Adt) -> (t:Ty) -> (v: List Tvar) -> ((VariantInst a t v) -> Expr (a[t])) -> (Ctr a t v)
   | _, _, [], f => (f VariantInst.nil)
-  | a, t, Tvar.T::xs, f => fun x => ctr a t xs fun v => f $ VariantInst.cons Tvar.T x v
-  | a, t, Tvar.Rec::xs, f => fun x => ctr a t xs fun v => f $ VariantInst.cons Tvar.Rec x v
+  | a, t, Tvar.T::xs, f => fun x => ctr a t xs fun v => f $ VariantInst.T t x v
+  | a, t, Tvar.Rec::xs, f => fun x => ctr a t xs fun v => f $ VariantInst.R t x v
 
 def mkctr (a:Adt) (t) (n:Nat) (p:n<a.Variants.length := by decide): Ctr a t a.Variants[n].snd :=
   ctr a t a.Variants[n].snd fun v => Expr.data a $ DataInst.k ⟨n,p⟩ v
@@ -304,7 +334,7 @@ def NIL := mkctr LIST int 1
 
 
 
-#eval compile_term NIL
+#eval Expr.compile NIL
 
 #eval
   @main = CONS (Expr.intlit 22) NIL;
