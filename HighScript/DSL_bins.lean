@@ -47,7 +47,7 @@ def TypedVar.var (v:TypedVar) : Var v.v.fst := Var.mk v.v.1 v.v.2
 def TypedVar.name x := (TypedVar.v x ).2
 def TypedVar.ty x := (TypedVar.v x ).1
 
-instance : BEq TypedVar where beq (a b: TypedVar) := a.v == b.v
+instance : BEq TypedVar where beq (a b: TypedVar) := a.name == b.name
 def Var.toTypedVar (v:Var t) : TypedVar := ⟨v⟩
 
 instance : Repr (Var t) where reprPrec v _ := s!"{v.name}"
@@ -156,7 +156,36 @@ mutual
         (newVar (c.v.2 ++ "2")) (.var $ c.var) x ))
         (Expr.data adt n i)
       , xs)
+    | .mmatch x m =>
+      let (x, xs) := x.linearize
+      let (m, rs, os) := m.linearize
+      let collisions := xs.filter (rs.contains)
+      let (x, m) := collisions.foldl (λ (x, m) c =>
+        (x.replace c.name $ c.name ++ "1", m.replace c.name $ c.name ++ "2")) (x, m)
+      let ex := (collisions ++ os).foldl (λ x c =>
+        Expr.dub 0
+          (newVar (c.v.2 ++ "1"))
+          (newVar (c.v.2 ++ "2")) (.var $ c.var) x) $ Expr.mmatch x m
+      (ex, xs ++ rs.filter (! xs.contains .))
     | k => .mk k []
+
+  def MatchCase.linearize : (m:MatchCase r t vs res) -> MatchCase r t vs res × List TypedVar
+    | .nil e =>
+      let (e, es) := e.linearize
+      (.nil e, es)
+    | .cons tv vr rest =>
+      let (rest, xs) := rest.linearize
+      let xs := xs.filter (. != (vr.toTypedVar))
+      (.cons tv vr rest, xs)
+
+  def Match.linearize : (m:Match a t vs res) -> Match a t vs res × List TypedVar × List TypedVar
+    | .nil => (.nil, [], [])
+    | .cons x rest =>
+      let (x, xs) := x.linearize
+      let (rest, rs, os) := rest.linearize
+      let collisions := xs.filter (rs.contains)
+      let (x, rest) := collisions.foldl (λ (x, r) c => (x.replace c.name $ c.name ++ "1", r.replace c.name $ c.name ++ "2")) (x,rest)
+      (.cons x rest, xs ++ rs.filter (! xs.contains .), collisions)
 
   def Instance.linearize : (i:Instance a t vs) -> Instance a t vs × List TypedVar × List TypedVar
     | .nil => (.nil, .nil, .nil)
