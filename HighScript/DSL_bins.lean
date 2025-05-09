@@ -98,6 +98,8 @@ end
 @[match_pattern] def Expr.var (vr:Var t) := Expr.nullary (NullaryOp.var vr)
 @[match_pattern] def Expr.lam (vr: Var a) (e:Expr b) := Expr.unary (UnaryOp.lam vr) e
 @[match_pattern] def Expr.dub n (a b: Var t) e (res:Expr u) := Expr.binary (.dub n a b ) e res
+@[match_pattern] def Expr.int n := Expr.nullary (.intlit n)
+@[match_pattern] def Expr.string s := Expr.nullary (.stringlit s)
 
 mutual
 
@@ -232,13 +234,94 @@ def Expr.compile : (e:Expr t) -> String
 
 end
 
+mutual
+
 def Expr.collect (m: Std.HashMap String String) : (e:Expr t) -> (Std.HashMap String String)
   | .unary (UnaryOp.fn n) e =>
     let m := e.collect m
     let n := "@" ++ n
     if m.contains n then m else m.insert n $ n ++ " = " ++ e.compile
+  | .unary op e => e.collect m
+  | .binary op a b => a.collect $ b.collect m
   | .data a _ _ =>
     let show_vari := fun (v:Variant) => s!"#{v.fst}\{{ " ".intercalate $ v.snd.map (fun t => (t.choose "x" "rec"))}}"
     m.insert a.name $ s!"data {a.name} \{{" ".intercalate $ (a.Variants.map show_vari) }}"
-  | .unary op e => e.collect m
+  | .mmatch x mt =>  x.collect $ mt.collect m
   | k => m
+
+def MatchCase.collect (m: Std.HashMap String String) : MatchCase r t vs res -> Std.HashMap String String
+  | .nil e => e.collect m
+  | .cons tv vr rest => rest.collect m
+
+def Match.collect (m: Std.HashMap String String) : Match a t vs res -> Std.HashMap String String
+  | .nil => m
+  | .cons x rest => x.collect $ rest.collect m
+
+end
+
+
+def compile {s} (e: Expr s) : String :=
+  let m := (e.linearize).fst.collect (Std.HashMap.empty)
+  let all_code := m.fold (init := "") (fun acc _ v => acc ++ v ++ "\n")
+  all_code
+
+def Ctr : (a:Adt) -> (t:Ty) -> (var: List DataField) -> Type
+  | a, t, [] => Expr $ a[t]
+  | a, t, DataField.T::xs => Expr t -> Ctr a t xs
+  | a, t, DataField.R::xs => Expr (a[t]) -> Ctr a t xs
+
+def ctr : (a:Adt) -> (t:Ty) -> (v: List DataField) -> ((Instance a t v) -> Expr (a[t])) -> (Ctr a t v)
+  | _, _, [], f => (f Instance.nil)
+  | a, t, DataField.T::xs, f => fun x => ctr a t xs fun v => f $ Instance.cons DataField.T x v
+  | a, t, DataField.R::xs, f => fun x => ctr a t xs fun v => f $ Instance.cons DataField.R x v
+
+def mkctr (a:Adt) (t) (n:Fin a.Variants.length): Ctr a t a.Variants[n].snd :=
+  ctr a t a.Variants[n].snd fun v => Expr.data a n v
+
+
+def CaseMaker (a t res: Ty) (vars : List DataField) : (v:List DataField) -> Type
+  | [] => (Expr res) -> (MatchCase a t vars res)
+  | DataField.T::vs => (Var t) -> (CaseMaker a t res vars vs)
+  | DataField.R::vs => (Var a) -> (CaseMaker a t res vars vs)
+
+def caseMaker (a t res: Ty) (vars: List DataField) : (v: List DataField) -> (MatchCase a t v res -> MatchCase a t vars res) -> (CaseMaker a t res vars v)
+  | [], f => fun (ex:Expr res) => f (MatchCase.nil ex)
+  | DataField.T::vs, f => fun (va: Var t) => caseMaker a t res vars vs fun (cs) => f (MatchCase.cons .T va cs)
+  | DataField.R::vs, f => fun (va: Var a) => caseMaker a t res vars vs fun (cs) => f (MatchCase.cons .R va cs)
+
+def mkcase  (a:Adt) (t res:Ty) (n:Nat) (p: n<a.Variants.length:= by decide) (vs:List DataField := a.Variants[n].snd): (CaseMaker (a[t]) t res vs vs):=
+  caseMaker (a[t]) t res vs vs (fun x => x)
+
+def MatchMaker (a:Adt) (t res:Ty): (varis:List Variant) -> Type
+  | [] => (ex: Expr (a[t])) -> Expr res
+  | vs::vss => (MatchCase (a[t]) t vs.snd res) -> MatchMaker a t res vss
+
+def matchMaker (a:Adt) (t res:Ty): (varis:List Variant) -> (f: Match a t varis res → Match a t a.Variants res) -> MatchMaker a t res varis
+  | [], f =>
+    let  mat := (f Match.nil : Match a t a.Variants res)
+    fun arg => (Expr.mmatch arg mat)
+  | vs::vss, f => fun (cs:MatchCase (a[t]) t vs.2 res) => matchMaker a t res vss fun m => f (Match.cons cs m)
+
+def mkmatch (a:Adt) (t res:Ty)
+  : MatchMaker a t res (a.Variants)
+  := matchMaker a t res (a.Variants) fun m => m
+
+
+def LIST := Adt.mk "list" [("CONS",[TT, RR]), ("NIL",[])]
+def CONS := mkctr LIST int ⟨0, by decide⟩
+def NIL := mkctr LIST int ⟨1, by decide⟩
+
+
+def kk := CONS (.int 22) NIL
+
+
+#eval compile kk
+
+
+def cs := mkcase LIST int int 1
+
+def css := cs (.int 22)
+def conscase := (mkcase LIST int int 0) (newVar "x") (newVar "tail") (.int 33)
+
+def lmatch := (mkmatch LIST int int) conscase css
+def matchex : Expr int := lmatch kk
