@@ -103,11 +103,13 @@ mutual
 end
 
 @[match_pattern] def Expr.var (vr:Var t) := Expr.nullary (NullaryOp.var vr)
-@[match_pattern] def Expr.lam (vr: Var a) (e:Expr b) := Expr.unary (UnaryOp.lam vr) e
-@[match_pattern] def Expr.dub n (a b: Var t) e (res:Expr u) := Expr.binary (.dub n a b ) e res
 @[match_pattern] def Expr.int n := Expr.nullary (.intlit n)
 @[match_pattern] def Expr.string s := Expr.nullary (.stringlit s)
+@[match_pattern] def Expr.lam (vr: Var a) (e:Expr b) := Expr.unary (UnaryOp.lam vr) e
 @[match_pattern] def Expr.fn name (bod:Expr t):= Expr.unary (.fn name) bod
+@[match_pattern] def Expr.dub n (a b: Var t) e (res:Expr u) := Expr.binary (.dub n a b ) e res
+@[match_pattern] def Expr.arith op (a b) := Expr.binary (.arith op) a b
+
 
 mutual
 
@@ -315,15 +317,52 @@ def mkmatch (a:Adt) (t res:Ty)
   := matchMaker a t res (a.Variants) fun m => m
 
 
+
+def fn (name:String) (e:Expr t): Expr t :=
+  Expr.fn name e
+
+-- macros
+
+
+macro:100 "lam" x:ident "->" body:term:100 : term => `(makelam $(Lean.quote (x.getId.toString)) fun $x => $body)
+
+
+macro:50 "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
+macro:50 "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := fn $(Lean.quote (n.getId.toString)) $val; $body)
+macro:100 "#" n:num : term => `(Expr.int $n)
+macro:100 "#" n:str : term => `(Expr.string $n)
+
+macro:50 v:term:50 "as" t:term:51 : term => `(astype $t $v)
+macro:50  a:term:50 "(" b:term:50 ")" : term => `(Expr.app $a $b)
+
+macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := newVar $(Lean.quote (n.getId.toString)); $bod)
+macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" "=" c:term:50 ";" d:term:50 : term => `(Expr.dub $l $a $b $c $d)
+macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
+macro:50  a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
+macro:50  a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
+macro:60  a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
+macro:60  a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
+
+
+
+#eval Expr.compile $ #22
+#eval Expr.compile $ #22 + #33
+#eval Expr.compile $ #22 - #33
+#eval
+  @main = #22;
+  compile main
+
+
+
+
 def LIST := Adt.mk "list" [("CONS",[TT, RR]), ("NIL",[])]
 def CONS := mkctr LIST int ⟨0, by decide⟩
 def NIL := mkctr LIST int ⟨1, by decide⟩
 
 
+
+
 def kk := CONS (.int 22) NIL
-
-
-#eval compile kk
 
 
 def cs := mkcase LIST int int 1
@@ -334,4 +373,6 @@ def conscase := (mkcase LIST int int 0) (newVar "x") (newVar "tail") (.int 33)
 def lmatch := (mkmatch LIST int int) conscase css
 def matchex : Expr int := lmatch kk
 
-#eval compile $ .fn "main" matchex
+-- #eval compile $ .fn "main" matchex
+
+-- #check true
