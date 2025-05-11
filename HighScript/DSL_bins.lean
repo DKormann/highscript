@@ -1,5 +1,5 @@
 
-
+import Lean
 -- work in progress ADT support for highscript
 -- the core functionality works. now just some macros
 -- then: stronger type safety
@@ -342,6 +342,29 @@ macro:50  a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
 macro:50  a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
 macro:60  a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
 macro:60  a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
+
+
+
+
+
+
+
+declare_syntax_cat construction
+syntax "#" ident "{" ident* "}" : construction
+
+macro "data" name:ident "{" ctrs:construction* "}" : term => do
+  let mut counts := #[]
+  for ctr in ctrs do
+    match ctr with
+    | `(construction| #$name { $args* }) =>
+        counts := counts.push (Lean.Syntax.mkNumLit (toString args.size))
+    | _ => let _ := ()
+
+  return ← `([$counts,*])
+
+
+#eval data list { #cons {a b} #nil{} } == [2,0]
+#eval data maybe { #some {a} #none{} } == [2,0]
 
 
 
