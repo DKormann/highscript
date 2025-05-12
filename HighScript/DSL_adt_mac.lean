@@ -1,5 +1,6 @@
 
 import Lean
+
 -- work in progress ADT support for highscript
 -- the core functionality works. now just some macros
 -- then: stronger type safety
@@ -288,37 +289,11 @@ def mkctr (a:Adt) (t) (n:Fin a.Variants.length): Ctr a t a.Variants[n].snd :=
   ctr a t a.Variants[n].snd fun v => Expr.data a n v
 
 
-def CaseMaker (a t res: Ty) (vars : List DataField) : (v:List DataField) -> Type
-  | [] => (Expr res) -> (MatchCase a t vars res)
-  | DataField.T::vs => (Var t) -> (CaseMaker a t res vars vs)
-  | DataField.R::vs => (Var a) -> (CaseMaker a t res vars vs)
-
-def caseMaker (a t res: Ty) (vars: List DataField) : (v: List DataField) -> (MatchCase a t v res -> MatchCase a t vars res) -> (CaseMaker a t res vars v)
-  | [], f => fun (ex:Expr res) => f (MatchCase.nil ex)
-  | DataField.T::vs, f => fun (va: Var t) => caseMaker a t res vars vs fun (cs) => f (MatchCase.cons .T va cs)
-  | DataField.R::vs, f => fun (va: Var a) => caseMaker a t res vars vs fun (cs) => f (MatchCase.cons .R va cs)
-
-def mkcase  (a:Adt) (t:Ty) {res:Ty} (n:Nat) (p: n<a.Variants.length:= by decide) (vs:List DataField := a.Variants[n].snd): (CaseMaker (a[t]) t res vs vs):=
-  caseMaker (a[t]) t res vs vs (fun x => x)
-
-def MatchMaker (a:Adt) (t res:Ty): (varis:List Variant) -> Type
-  | [] => Match a t a.Variants res
-  | vs::vss => (MatchCase (a[t]) t vs.snd res) -> MatchMaker a t res vss
-
-def matchMaker (a:Adt) (t res:Ty): (varis:List Variant) -> (f: Match a t varis res → Match a t a.Variants res) -> MatchMaker a t res varis
-  | [], f => (f Match.nil : Match a t a.Variants res)
-  | vs::vss, f => fun (cs:MatchCase (a[t]) t vs.2 res) => matchMaker a t res vss fun m => f (Match.cons cs m)
-
-def mkmatch (a:Adt) (t res:Ty)
-  : MatchMaker a t res (a.Variants)
-  := matchMaker a t res (a.Variants) fun m => m
-
 
 def fn (name:String) (e:Expr t): Expr t :=
   Expr.fn name e
 
 -- macros
-
 
 macro:100 "lam" x:ident "->" body:term:100 : term => `(makelam $(Lean.quote (x.getId.toString)) fun $x => $body)
 
@@ -349,7 +324,6 @@ def ident2stringlit (x : Lean.TSyntax `ident) := Lean.Syntax.mkStrLit x.getId.to
 def construc (name:String) (xs: List (String × List String)) :Adt :=
   Adt.mk name $ xs.map (fun x => (x.1, x.2.map (fun x=> if x == "rec" then RR else TT)))
 
-
 macro "data" name:ident "{" ctrs:construction* "}" rest:term : term => do
   let mut allLists := #[]
   let mut assign := ← `($rest)
@@ -365,7 +339,6 @@ macro "data" name:ident "{" ctrs:construction* "}" rest:term : term => do
         c := Lean.Syntax.mkNatLit (c.getNat + 1)
     | _ => _ := ()
 
-
   return (← `(
     let arr : List (String × ( List String)) := [$allLists,*];
     let $name := construc ($(ident2stringlit name)) arr
@@ -373,16 +346,15 @@ macro "data" name:ident "{" ctrs:construction* "}" rest:term : term => do
   ))
 
 
-#eval
-  data list { #cons {a rec} #nil {} }
-  let intnil : Expr (list [int]) := nil
-  let lst : Expr (list [int]) := cons (#22) nil
-  lst
+-- #eval
 
+--   data list { #cons {a rec} #nil {} }
 
-#eval
-  data maybe { #some {a} #none {} }
-  22
+--   let intnil : Expr (list [int]) := nil
+
+--   let lst : Expr (list [int]) := cons (#22) nil
+
+--   lst
 
 
 def LIST := Adt.mk "list" [("CONS",[TT, RR]), ("NIL",[])]
@@ -390,28 +362,22 @@ def CONS := mkctr LIST int ⟨0, by decide⟩
 def NIL := mkctr LIST int ⟨1, by decide⟩
 
 
+
+
+def manual_match : Expr int :=
+  let head := newVar "head" ;
+  let tail := newVar "tail" ;
+  .mmatch
+    NIL
+    $ Match.cons
+      (.cons .T head $ .cons .R tail $ .nil (#22) )
+    $ Match.cons
+      (.nil (#33))
+    Match.nil
+
+
 declare_syntax_cat match_case
 syntax "#" ident "{" ident* "}" ":" term : match_case
-
-
-def extadt {a:Adt} {t:Ty} (i:Expr $ a[t]) := a
-def extty {a:Adt} {t:Ty} (i:Expr $ a[t]) := t
-
-
-
-
-def mix_mat : Expr int :=
-  let arg := NIL
-
-  let a := extadt arg
-  let t := extty arg
-  .mmatch arg
-    $ .cons
-      ((mkcase a t 0) (newVar "h") (newVar "tail") (.int 22))
-    $ .cons
-      ((mkcase a t 1) (.int 22))
-    .nil
-
 
 
 macro "~" argument:term ":" "{" arms:match_case+ "}" : term => do
