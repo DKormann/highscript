@@ -11,7 +11,7 @@ set_option linter.unusedVariables false
 inductive DataField : Type
   | T: DataField
   | R: DataField
-deriving BEq, Hashable
+deriving BEq, Hashable, Repr
 
 abbrev TT := DataField.T
 abbrev RR := DataField.R
@@ -22,20 +22,20 @@ abbrev Variant := String × List (DataField)
 structure Adt where
   name: String
   Variants : List Variant
-deriving BEq, Hashable
+deriving BEq, Hashable, Repr
 
 
 inductive Ty
   | int
   | string
   | arrow: Ty -> Ty -> Ty
-  | data : (a: Adt) → Ty → Ty
-deriving BEq, Hashable
+  | inst : (a: Adt) → Ty → Ty
+deriving BEq, Hashable, Repr
 
 open Ty
 
 infixl:56 "->" => arrow
-macro:100 adt:term:100 " [" t:term:100 "]" : term => `(data $adt $t)
+macro:100 adt:term:100 " [" t:term:100 "]" : term => `(inst $adt $t)
 
 inductive Var :(t: Ty) -> Type | mk : (t:Ty) -> (name: String) -> Var t
 deriving BEq, Hashable
@@ -85,6 +85,7 @@ mutual
     | binary : BinaryOp a b c -> Expr a -> Expr b -> Expr c
     | data : (adt: Adt) -> {t: Ty} -> (n:Fin adt.Variants.length) -> (v: Instance a t (adt.Variants[n].snd)) → Expr (adt[t])
     | mmatch : (x: Expr (a[t])) -> (Match a t a.Variants res) -> Expr res
+  deriving Repr
 
   inductive Instance : (a: Adt) -> (t:Ty) -> (v: List DataField) -> Type
     | nil : Instance a t []
@@ -333,7 +334,7 @@ macro:100 "#" n:num : term => `(Expr.int $n)
 macro:100 "#" n:str : term => `(Expr.string $n)
 
 macro:50 v:term:50 "as" t:term:51 : term => `(astype $t $v)
-macro:50  a:term:50 "(" b:term:50 ")" : term => `(Expr.app $a $b)
+-- macro:50  a:term:50 "(" b:term:50 ")" : term => `(Expr.app $a $b)
 
 macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := newVar $(Lean.quote (n.getId.toString)); $bod)
 macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" "=" c:term:50 ";" d:term:50 : term => `(Expr.dub $l $a $b $c $d)
@@ -345,57 +346,89 @@ macro:60  a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
 
 
 
-
-
-
-
 declare_syntax_cat construction
 syntax "#" ident "{" ident* "}" : construction
 
-macro "data" name:ident "{" ctrs:construction* "}" : term => do
-  let mut counts := #[]
+def ident2stringlit (x : Lean.TSyntax `ident) := Lean.Syntax.mkStrLit x.getId.toString
+
+def construc (name:String) (xs: List (String × List String)) :Adt :=
+  Adt.mk name $ xs.map (fun x => (x.1, x.2.map (fun x=> if x == "rec" then RR else TT)))
+
+
+macro "data" name:ident "{" ctrs:construction* "}" rest:term : term => do
+  let mut allLists := #[]
+  let mut assign := ← `($rest)
+  let mut c := Lean.Syntax.mkNatLit 0
   for ctr in ctrs do
     match ctr with
-    | `(construction| #$name { $args* }) =>
-        counts := counts.push (Lean.Syntax.mkNumLit (toString args.size))
-    | _ => let _ := ()
-
-  return ← `([$counts,*])
-
-
-#eval data list { #cons {a b} #nil{} } == [2,0]
-#eval data maybe { #some {a} #none{} } == [2,0]
-
+    | `(construction| #$ctrname { $args* }) =>
+        let strLits ← args.mapM fun id => `($(ident2stringlit id))
+        allLists := allLists.push ( ← `(( $(ident2stringlit ctrname) , [$strLits,*])))
+        assign := ← `(
+          let $ctrname := mkctr $name int ⟨$c, by decide⟩
+          $assign )
+        c := Lean.Syntax.mkNatLit (c.getNat + 1)
+    | _ => _ := ()
 
 
-#eval Expr.compile $ #22
-#eval Expr.compile $ #22 + #33
-#eval Expr.compile $ #22 - #33
+  return (← `(
+    let arr : List (String × ( List String)) := [$allLists,*];
+    let $name := construc ($(ident2stringlit name)) arr
+    $assign
+  ))
+
+
 #eval
-  @main = #22;
-  compile main
+
+  data list { #cons {a rec} #nil {} }
+
+  let intnil : Expr (list [int]) := nil
+
+  let lst : Expr (list [int]) := cons (#22) nil
+
+  lst
 
 
 
 
-def LIST := Adt.mk "list" [("CONS",[TT, RR]), ("NIL",[])]
-def CONS := mkctr LIST int ⟨0, by decide⟩
-def NIL := mkctr LIST int ⟨1, by decide⟩
+
+
+-- #eval
+--   data maybe { #some {a} #none {} }
+--   22
 
 
 
 
-def kk := CONS (.int 22) NIL
+-- #eval Expr.compile $ #22
+-- #eval Expr.compile $ #22 + #33
+-- #eval Expr.compile $ #22 - #33
+-- #eval
+--   @main = #22;
+--   compile main
 
 
-def cs := mkcase LIST int int 1
 
-def css := cs (.int 22)
-def conscase := (mkcase LIST int int 0) (newVar "x") (newVar "tail") (.int 33)
 
-def lmatch := (mkmatch LIST int int) conscase css
-def matchex : Expr int := lmatch kk
+-- def LIST := Adt.mk "list" [("CONS",[TT, RR]), ("NIL",[])]
+-- def CONS := mkctr LIST int ⟨0, by decide⟩
+-- def NIL := mkctr LIST int ⟨1, by decide⟩
 
--- #eval compile $ .fn "main" matchex
 
--- #check true
+
+
+
+-- def kk := CONS (.int 22) NIL
+
+
+-- def cs := mkcase LIST int int 1
+
+-- def css := cs (.int 22)
+-- def conscase := (mkcase LIST int int 0) (newVar "x") (newVar "tail") (.int 33)
+
+-- def lmatch := (mkmatch LIST int int) conscase css
+-- def matchex : Expr int := lmatch kk
+
+-- -- #eval compile $ .fn "main" matchex
+
+-- -- #check true
