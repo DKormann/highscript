@@ -105,6 +105,7 @@ end
 @[match_pattern] def Expr.int n := Expr.nullary (.intlit n)
 @[match_pattern] def Expr.string s := Expr.nullary (.stringlit s)
 @[match_pattern] def Expr.lam (vr: Var a) (e:Expr b) := Expr.unary (UnaryOp.lam vr) e
+@[match_pattern] def Expr.app (a: Expr (arrow ta tb)) (b:Expr ta) := Expr.binary (.app) a b
 @[match_pattern] def Expr.fn name (bod:Expr t):= Expr.unary (.fn name) bod
 @[match_pattern] def Expr.dub n (a b: Var t) e (res:Expr u) := Expr.binary (.dub n a b ) e res
 @[match_pattern] def Expr.arith op (a b) := Expr.binary (.arith op) a b
@@ -222,21 +223,20 @@ def Expr.compile (tabs: Nat := 0) (e:Expr t) : String :=
   | .nullary $ NullaryOp.var v => s!"{v.name}"
   | .nullary $ NullaryOp.ftag s t => s!"@{s}"
   | .unary (UnaryOp.lam v) e => s!"λ {v.name} {e.compile tt}"
-  | .unary (UnaryOp.fn n) e => s!"@{n} {e.compile tt}"
+  | .unary (UnaryOp.fn n) e => s!"@{n}"
   | .unary (UnaryOp.as t) e => s!"{e.compile tt}"
   | .binary op a b => match op with
-    | .arith op => s!"{a.compile} {op} {b.compile tt}"
+    | .arith op => s!"({op} {a.compile} {b.compile tt})"
     | .app => s!"({a.compile tt} {b.compile tt})"
     | .sup n => s!"&{n}\{{a.compile tt} {b.compile tt}}"
     | .nsup => s!"&\{{a.compile tt} {b.compile tt}}"
-    | .dub n x y => s!"{a.compile tt} {b.compile tt}"
+    | .dub n x y => s!"{nl}!&{n}\{{x.name} {y.name}}={a.compile tt}{nl}{b.compile tt}"
   | .data adt n i => s!"#{(adt.Variants[n]).1} \{{ i.compile }}"
   | .mmatch x m => s!"~({x.compile}) {nl}\{{m.compile tt}{nl}}"
 
   def MatchCase.compile (tabs:Nat:=0): MatchCase r t vs rest -> String
     | .nil e => "} : " ++ e.compile
     | .cons df vr rest => vr.name ++ " " ++ rest.compile tabs
-
 
   def Match.compile (tabs:Nat:=0) : Match a t vs rest -> String
     | .nil => ""
@@ -274,18 +274,17 @@ def Match.collect (m: Std.HashMap String String) : Match a t vs res -> Std.HashM
 end
 
 
-
 inductive HVM_Program
   | mk : String -> HVM_Program
 
-instance : Repr HVM_Program where
-  reprPrec p _ := match p with
-    | .mk s => s!"{s}"
+def HVM_Program.tostring : HVM_Program -> String | .mk s => s ++ "\n"
+
+instance : Repr HVM_Program where reprPrec p _ := p.tostring
 
 
 def compile {s} (e: Expr s) : HVM_Program :=
   let m := (e.linearize).fst.collect (Std.HashMap.empty)
-  let all_code := m.fold (init := "") (fun acc _ v => acc ++ v ++ "\n")
+  let all_code := m.fold (init := "") (fun acc _ v => acc ++ v ++ "\n\n")
   HVM_Program.mk all_code
 
 def Ctr : (a:Adt) -> (t:Ty) -> (var: List DataField) -> Type
@@ -338,7 +337,9 @@ def makelam (tag:String) (builder : (Expr a) -> Expr b) : Expr (arrow a b) :=
   Expr.lam x $ builder (Expr.var x)
 
 
-macro:100 "lam" x:ident "->" body:term:100 : term => `(makelam $(Lean.quote (x.getId.toString)) fun $x => $body)
+macro "lam" x:ident "->" body:term : term => `(makelam $(Lean.quote (x.getId.toString)) fun $x => $body)
+macro:50  a:term:50 "(" b:term:50 ")" : term => `(Expr.app $a $b)
+
 
 macro:50 "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
 macro:50 "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := fn $(Lean.quote (n.getId.toString)) $val; $body)
@@ -437,3 +438,18 @@ macro "~" argument:term ":" "{" arms:match_case+ "}" : term => do
     Expr.mmatch arg $
     $assign
     ))
+
+
+
+#eval
+  @fn = lam x -> x + x;
+  compile fn
+
+
+
+#eval
+  @add = lam x -> lam y -> (x + y);
+  @fn = lam x -> ((add (x)) (x));  -- compiler will duplicate x here for us
+
+  @main = (fn (#10));               -- literals need to be wrapped with #
+  compile main
