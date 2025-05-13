@@ -377,12 +377,12 @@ macro "data" name:ident "{" ctrs:construction* "}" rest:term : term => do
   data list { #cons {a rec} #nil {} }
   let intnil : Expr (list [int]) := nil
   let lst : Expr (list [int]) := cons (#22) nil
-  lst
+  ()
 
 
 #eval
   data maybe { #some {a} #none {} }
-  22
+  ()
 
 
 def LIST := Adt.mk "list" [("CONS",[TT, RR]), ("NIL",[])]
@@ -398,36 +398,74 @@ def extadt {a:Adt} {t:Ty} (i:Expr $ a[t]) := a
 def extty {a:Adt} {t:Ty} (i:Expr $ a[t]) := t
 
 
-
-
-def mix_mat : Expr int :=
+def mix_mat
+  -- : Expr int
+  :=
   let arg := NIL
-
   let a := extadt arg
   let t := extty arg
-  .mmatch arg
+  arg.mmatch
     $ .cons
       ((mkcase a t 0) (newVar "h") (newVar "tail") (.int 22))
     $ .cons
       ((mkcase a t 1) (.int 22))
     .nil
 
+def partk:=
+  let arg := NIL
+  let a := extadt arg
+  let t := extty arg
+
+  ((mkcase a t 0) (newVar "h") (newVar "tail") (.int 22))
+
+def mix_nix :=
+  let arg := NIL
+  let a := extadt arg
+  let t := extty arg
+
+  -- Expr.mmatch arg
+  Match.cons
+    -- ((mkcase a t 0) (newVar "h") (newVar "tail") (.int 22))
+    ((mkcase a t 1) (.int 22))
+  $ .cons
+    ((mkcase a t 1) (.int 22))
+  .nil
+
 
 
 macro "~" argument:term ":" "{" arms:match_case+ "}" : term => do
 
-  for arm in arms do
+  let mut assign := ← `(Match.nil)
+  let mut c := arms.size
+  for arm in arms.reverse do
     match arm with
     |  `(match_case | # $variantname {$fieldvars*} : $bod) =>
-      _ := ()
+      c := c - 1
+      let mut arm := ← `((mkcase a t $(Lean.Syntax.mkNatLit c)))
+      for fieldvar in fieldvars do
+        arm := ← `( $arm (newVar $(ident2stringlit fieldvar)))
+      assign :=  ← `(
+        Match.cons ( ($arm) ($bod))
+        $assign
+        )
+      _ :=()
+
     | _ => _ := ()
 
-  return (← `($argument))
+  return  (<- `(
+    let arg := $argument
+    let a := extadt arg
+    let t := extty arg
+    Expr.mmatch arg $
+    $assign
+    ))
+
 
 
 
 #check
-  ~ NIL : {
-    #CONS {h t} : 33
-    #NIL {} : 22
+  let q := ~ NIL : {
+    #CONS {h t} : .int 33
+    #NIL {} : .int 22
   }
+  q
