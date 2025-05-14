@@ -30,7 +30,7 @@ deriving BEq, Hashable, Repr
 
 open Ty
 
-infixl:56 "->" => arrow
+infixr:56 "->" => arrow
 macro:100 adt:term:100 " [" t:term:100 "]" : term => `(inst $adt $t)
 
 inductive Var :(t: Ty) -> Type | mk : (t:Ty) -> (name: String) -> Var t
@@ -310,8 +310,12 @@ def makelam (tag:String) (builder : (Expr a) -> Expr b) : Expr (arrow a b) :=
 
 
 macro "lam" x:ident "->" body:term : term => `(makelam $(Lean.quote (x.getId.toString)) fun $x => $body)
-macro:50  a:term:50 "(" b:term:50 ")" : term => `(Expr.app $a $b)
 
+infixl:70 "**" => Expr.app
+infixl:70 "⬝" => Expr.app
+infixl:70 "•" => Expr.app
+-- macro a:term:70 "•" b:term:71  : term => `(Expr.app $a $b)
+macro "(" a:term:70 b:term:71 ")" : term => `(Expr.app $a $b)
 
 macro:50 "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
 macro:50 "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := fn $(Lean.quote (n.getId.toString)) $val; $body)
@@ -321,12 +325,12 @@ macro:100 "#" n:str : term => `(Expr.string $n)
 macro:50 v:term:50 "as" t:term:51 : term => `(astype $t $v)
 
 macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := newVar $(Lean.quote (n.getId.toString)); $bod)
-macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" "=" c:term:50 ";" d:term:50 : term => `(Expr.dub $l $a $b $c $d)
-macro:50  "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
-macro:50  a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
-macro:50  a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
-macro:60  a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
-macro:60  a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
+macro:50 "&" l:num "{" a:term:50 "," b:term:50  "}" "=" c:term:50 ";" d:term:50 : term => `(Expr.dub $l $a $b $c $d)
+macro:50 "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
+macro:50 a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
+macro:50 a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
+macro:60 a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
+macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
 
 
 
@@ -392,14 +396,3 @@ macro "~" argument:term ":" "{" arms:match_case+ "}" : term => do
     Expr.mmatch arg $
     $assign
     ))
-
-#eval
-  @fn = lam x -> x + x;
-  compile fn
-
-#eval
-  @add = lam x -> lam y -> (x + y);
-  @fn = lam x -> ((add (x)) (x));
-
-  @main = (fn (#10));
-  compile main

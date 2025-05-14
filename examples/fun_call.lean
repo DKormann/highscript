@@ -1,16 +1,13 @@
-
-
 import HighScript
 
 
+-- macro "(" a:term:70 "(" b:term:71 ")" ")" : term => `(Expr.app $a $b)
 
 
-def main : IO Unit :=
+def main :=
 
-  @add = lam x -> lam y -> (x + y); -- lean's powerfull type inference helps us out here
+  let f : Expr (int -> int) := lam x -> (x * #2);
+  let add : Expr (int -> int -> int) := lam x -> lam y  -> x + y;
 
-  @fn = lam x -> ((add (x)) (x));  -- compiler will duplicate x here for us
 
-  @main = (fn (#10));               -- literals need to be wrapped with #
-
-  do runHVM main
+  runmain (add • (f • #10) • #50)
