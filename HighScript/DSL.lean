@@ -105,6 +105,8 @@ end
 @[match_pattern] def Expr.fn name (bod:Expr t):= Expr.unary (.fn name) bod
 @[match_pattern] def Expr.ftag name (t:Ty) := Expr.nullary (.ftag name t)
 @[match_pattern] def Expr.dub n (a b: Var t) e (res:Expr u) := Expr.binary (.dub n a b ) e res
+@[match_pattern] def Expr.sup n (a b:Expr t) := Expr.binary (.sup n) a b
+@[match_pattern] def Expr.nsup (a b:Expr t) := Expr.binary (.nsup) a b
 @[match_pattern] def Expr.arith op (a b) := Expr.binary (.arith op) a b
 
 
@@ -331,14 +333,26 @@ macro:100 "#" n:str : term => `(Expr.string $n)
 macro:50 v:term:50 "as" t:term:51 : term => `(astype $t $v)
 
 macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := newVar $(Lean.quote (n.getId.toString)); $bod)
-macro:50 "&" l:num "{" a:term:50 "," b:term:50  "}" "=" c:term:50 ";" d:term:50 : term => `(Expr.dub $l $a $b $c $d)
-macro:50 "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
+macro:50 "!&" l:num "{" a:ident b:ident  "}" "=" c:term:50 ";" d:term:50 : term =>
+  `(
+    let $a := newVar $(Lean.quote (a.getId.toString));
+    let $b := newVar $(Lean.quote (b.getId.toString));
+    Expr.dub $l $a $b $c (
+    let $a := Expr.var $a;
+    let $b := Expr.var $b;
+    $d))
+macro:50 "&" l:num "{" a:term:50 b:term:50  "}" : term => `(Expr.sup $l $a $b)
+macro:50 "&" "{" a:term:50 b:term:50  "}" : term => `(Expr.nsup $a $b)
 macro:50 a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
 macro:50 a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
 macro:60 a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
 macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
 
 
+
+#check
+  !&0{a b} = #33;
+  a
 
 declare_syntax_cat construction
 syntax "#" ident "{" ident* "}" : construction
