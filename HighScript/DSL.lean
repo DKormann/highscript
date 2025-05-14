@@ -224,7 +224,7 @@ mutual
       | .nsup => s!"&\{{a.compile tt} {b.compile tt}}"
       | .dub n x y => s!"{nl}!&{n}\{{x.name} {y.name}}={a.compile tt}{nl}{b.compile tt}"
     | .data adt n i => s!"#{(adt.Variants[n]).1} \{{ i.compile }}"
-    | .mmatch x m => s!"~({x.compile}) {nl}\{{m.compile tt}{nl}}"
+    | .mmatch x m => s!"~({x.compile}){nl}\{{m.compile tt}{nl}}"
 
   def MatchCase.compile (tabs:Nat:=0): MatchCase r t vs rest -> String
     | .nil e => "} : " ++ e.compile
@@ -232,18 +232,18 @@ mutual
 
   def Match.compile (tabs:Nat:=0) : Match a t vs rest -> String
     | .nil => ""
-    | @Match.cons a t _ _ v m rest => s!" \n{"".pushn ' ' tabs}#{v.fst} \{{m.compile $ tabs + 1 } {rest.compile tabs}"
+    | @Match.cons a t _ _ v m rest => s!"\n{"".pushn ' ' (tabs*2)}#{v.fst} \{{m.compile $ tabs + 1 } {rest.compile tabs}"
 
   def Instance.compile : (i:Instance adt t vs) -> String
     | .nil => ""
-    | .cons tv x rest => s!"{x.compile}, {rest.compile}"
+    | .cons tv x rest => s!"{x.compile} {rest.compile}"
 
 
   def Expr.collect (m: Std.HashMap String String) : (e:Expr t) -> (Std.HashMap String String)
     | .unary (UnaryOp.fn n) e =>
       let m := e.collect m
       let n := "@" ++ n
-      if m.contains n then m else m.insert n $ n ++ " = " ++ e.compile
+      if m.contains n then m else m.insert n $ n ++ " =\n  " ++ e.compile
     | .unary op e => e.collect m
     | .binary op a b => a.collect $ b.collect m
     | .data a _ _ =>
