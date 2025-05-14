@@ -303,13 +303,19 @@ def fn (name:String) (e:Expr t): Expr t := Expr.fn name e
 
 def astype  (t:Ty) (x: Expr t): Expr t := x
 
-macro "lam" x:ident "->" body:term : term => `(
+macro "lam" x:ident ":" t:term "=>" body:term : term => `(
+  let $x := Var.mk $t $(Lean.quote (x.getId.toString));
+  let binder := (Expr.lam $x)
+  let $x : Expr $t := Expr.var $x;
+  (binder $body)
+)
+
+macro "lam" x:ident "=>" body:term : term => `(
   let $x := newVar $(Lean.quote (x.getId.toString));
   let binder := (Expr.lam $x)
   let $x := Expr.var $x;
   (binder $body)
 )
-
 
 infixl:70 "**" => Expr.app
 infixl:70 "⬝" => Expr.app

@@ -21,8 +21,7 @@ def k: Nat -> Nat := exp:: okok ff endd
 
 def main :=
 
-  let f : Expr (int -> int) := lam x -> (x * #2);
-  let add : Expr (int -> int -> int) := lam x -> lam y  -> x + y;
-
+  let f := (lam x : int => x as int) as int -> int; -- use type annotations when needed
+  let add := lam x => lam y => x + y;
 
   runmain (add • (f • #10) • #50)
