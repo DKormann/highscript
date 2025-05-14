@@ -13,6 +13,7 @@ highscript is a LEAN DSL that compiles to [HVM](https://github.com/HigherOrderCo
   - [x] run HVM output
   - [x] support for custom ADT's
   - [x] Pattern matching
+  - [ ] mulit target ADT's (like tagged Union)
   - [ ] stronger type guarantees
 
 
