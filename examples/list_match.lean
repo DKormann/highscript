@@ -12,17 +12,25 @@ def main :=
   let c := #3;
 
   let nil := NIL;
-
   let abc := (CONS a (CONS b (CONS c NIL))) as list [int]
+
+  @len : (list[int]) -> int;        -- to use recursion we need to declare the function first sadly
+  @len = lam l : list[int] =>
+    ~ l : {
+      #CONS{h tail} : #1 + len • tail
+      #NIL{} : #0
+    };
 
   let list_match : Expr $ (list [int]) -> int :=
 
     lam l =>
       ~ l : {
-        #CONS{h tail} : Expr.var $ newVar "h"
+        #CONS{h tail} : h
         #NIL{} : #0
       }
 
-  let res := (list_match • abc)
+  let matched := (list_match • abc)
 
-  runmain res
+  let lens := (len • abc)
+
+  runmain $ lens + (len • NIL)

@@ -103,6 +103,7 @@ end
 @[match_pattern] def Expr.lam (vr: Var a) (e:Expr b) := Expr.unary (UnaryOp.lam vr) e
 @[match_pattern] def Expr.app (a: Expr (arrow ta tb)) (b:Expr ta) := Expr.binary (.app) a b
 @[match_pattern] def Expr.fn name (bod:Expr t):= Expr.unary (.fn name) bod
+@[match_pattern] def Expr.ftag name (t:Ty) := Expr.nullary (.ftag name t)
 @[match_pattern] def Expr.dub n (a b: Var t) e (res:Expr u) := Expr.binary (.dub n a b ) e res
 @[match_pattern] def Expr.arith op (a b) := Expr.binary (.arith op) a b
 
