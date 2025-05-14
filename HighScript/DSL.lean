@@ -299,22 +299,21 @@ def caseMaker (a t res: Ty) (vars: List DataField) : (v: List DataField) -> (Mat
 def mkcase  (a:Adt) (t:Ty) {res:Ty} (n:Nat) (p: n<a.Variants.length:= by decide) (vs:List DataField := a.Variants[n].snd): (CaseMaker (a[t]) t res vs vs):=
   caseMaker (a[t]) t res vs vs (fun x => x)
 
-def fn (name:String) (e:Expr t): Expr t :=
-  Expr.fn name e
+def fn (name:String) (e:Expr t): Expr t := Expr.fn name e
 
 def astype  (t:Ty) (x: Expr t): Expr t := x
 
-def makelam (tag:String) (builder : (Expr a) -> Expr b) : Expr (arrow a b) :=
-  let x: Var a := (newVar tag)
-  Expr.lam x $ builder (Expr.var x)
+macro "lam" x:ident "->" body:term : term => `(
+  let $x := newVar $(Lean.quote (x.getId.toString));
+  let binder := (Expr.lam $x)
+  let $x := Expr.var $x;
+  (binder $body)
+)
 
-
-macro "lam" x:ident "->" body:term : term => `(makelam $(Lean.quote (x.getId.toString)) fun $x => $body)
 
 infixl:70 "**" => Expr.app
 infixl:70 "⬝" => Expr.app
 infixl:70 "•" => Expr.app
--- macro a:term:70 "•" b:term:71  : term => `(Expr.app $a $b)
 macro "(" a:term:70 b:term:71 ")" : term => `(Expr.app $a $b)
 
 macro:50 "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
