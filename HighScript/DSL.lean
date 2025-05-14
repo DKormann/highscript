@@ -1,9 +1,5 @@
 
 import Lean
--- work in progress ADT support for highscript
--- the core functionality works. now just some macros
--- then: stronger type safety
-
 
 import Std.Data.HashMap
 set_option linter.unusedVariables false
@@ -210,29 +206,25 @@ mutual
         (x.replace c.name $ c.name ++ "1", r.replace c.name $ c.name ++ "2")) (x,r)
       (.cons tv x r, alls, rtd ++ collisions.filter (! rtd.contains .))
 
-end
-
-
-mutual
-def Expr.compile (tabs: Nat := 0) (e:Expr t) : String :=
-  let tt := tabs + 1
-  let nl := "\n".pushn ' ' (tabs * 2)
-  match e with
-  | .nullary $ NullaryOp.intlit n => s!"{n}"
-  | .nullary $ NullaryOp.stringlit s => s!"\"{s}\""
-  | .nullary $ NullaryOp.var v => s!"{v.name}"
-  | .nullary $ NullaryOp.ftag s t => s!"@{s}"
-  | .unary (UnaryOp.lam v) e => s!"λ {v.name} {e.compile tt}"
-  | .unary (UnaryOp.fn n) e => s!"@{n}"
-  | .unary (UnaryOp.as t) e => s!"{e.compile tt}"
-  | .binary op a b => match op with
-    | .arith op => s!"({op} {a.compile} {b.compile tt})"
-    | .app => s!"({a.compile tt} {b.compile tt})"
-    | .sup n => s!"&{n}\{{a.compile tt} {b.compile tt}}"
-    | .nsup => s!"&\{{a.compile tt} {b.compile tt}}"
-    | .dub n x y => s!"{nl}!&{n}\{{x.name} {y.name}}={a.compile tt}{nl}{b.compile tt}"
-  | .data adt n i => s!"#{(adt.Variants[n]).1} \{{ i.compile }}"
-  | .mmatch x m => s!"~({x.compile}) {nl}\{{m.compile tt}{nl}}"
+  def Expr.compile (tabs: Nat := 0) (e:Expr t) : String :=
+    let tt := tabs + 1
+    let nl := "\n".pushn ' ' (tabs * 2)
+    match e with
+    | .nullary $ NullaryOp.intlit n => s!"{n}"
+    | .nullary $ NullaryOp.stringlit s => s!"\"{s}\""
+    | .nullary $ NullaryOp.var v => s!"{v.name}"
+    | .nullary $ NullaryOp.ftag s t => s!"@{s}"
+    | .unary (UnaryOp.lam v) e => s!"λ {v.name} {e.compile tt}"
+    | .unary (UnaryOp.fn n) e => s!"@{n}"
+    | .unary (UnaryOp.as t) e => s!"{e.compile tt}"
+    | .binary op a b => match op with
+      | .arith op => s!"({op} {a.compile} {b.compile tt})"
+      | .app => s!"({a.compile tt} {b.compile tt})"
+      | .sup n => s!"&{n}\{{a.compile tt} {b.compile tt}}"
+      | .nsup => s!"&\{{a.compile tt} {b.compile tt}}"
+      | .dub n x y => s!"{nl}!&{n}\{{x.name} {y.name}}={a.compile tt}{nl}{b.compile tt}"
+    | .data adt n i => s!"#{(adt.Variants[n]).1} \{{ i.compile }}"
+    | .mmatch x m => s!"~({x.compile}) {nl}\{{m.compile tt}{nl}}"
 
   def MatchCase.compile (tabs:Nat:=0): MatchCase r t vs rest -> String
     | .nil e => "} : " ++ e.compile
@@ -246,41 +238,35 @@ def Expr.compile (tabs: Nat := 0) (e:Expr t) : String :=
     | .nil => ""
     | .cons tv x rest => s!"{x.compile}, {rest.compile}"
 
-end
 
-mutual
+  def Expr.collect (m: Std.HashMap String String) : (e:Expr t) -> (Std.HashMap String String)
+    | .unary (UnaryOp.fn n) e =>
+      let m := e.collect m
+      let n := "@" ++ n
+      if m.contains n then m else m.insert n $ n ++ " = " ++ e.compile
+    | .unary op e => e.collect m
+    | .binary op a b => a.collect $ b.collect m
+    | .data a _ _ =>
+      let show_vari := fun (v:Variant) => s!"#{v.fst}\{{ " ".intercalate $ v.snd.map (fun t => (t.choose "x" "rec"))}}"
+      m.insert a.name $ s!"data {a.name} \{{" ".intercalate $ (a.Variants.map show_vari) }}"
+    | .mmatch x mt =>  x.collect $ mt.collect m
+    | k => m
 
-def Expr.collect (m: Std.HashMap String String) : (e:Expr t) -> (Std.HashMap String String)
-  | .unary (UnaryOp.fn n) e =>
-    let m := e.collect m
-    let n := "@" ++ n
-    if m.contains n then m else m.insert n $ n ++ " = " ++ e.compile
-  | .unary op e => e.collect m
-  | .binary op a b => a.collect $ b.collect m
-  | .data a _ _ =>
-    let show_vari := fun (v:Variant) => s!"#{v.fst}\{{ " ".intercalate $ v.snd.map (fun t => (t.choose "x" "rec"))}}"
-    m.insert a.name $ s!"data {a.name} \{{" ".intercalate $ (a.Variants.map show_vari) }}"
-  | .mmatch x mt =>  x.collect $ mt.collect m
-  | k => m
+  def MatchCase.collect (m: Std.HashMap String String) : MatchCase r t vs res -> Std.HashMap String String
+    | .nil e => e.collect m
+    | .cons tv vr rest => rest.collect m
 
-def MatchCase.collect (m: Std.HashMap String String) : MatchCase r t vs res -> Std.HashMap String String
-  | .nil e => e.collect m
-  | .cons tv vr rest => rest.collect m
-
-def Match.collect (m: Std.HashMap String String) : Match a t vs res -> Std.HashMap String String
-  | .nil => m
-  | .cons x rest => x.collect $ rest.collect m
+  def Match.collect (m: Std.HashMap String String) : Match a t vs res -> Std.HashMap String String
+    | .nil => m
+    | .cons x rest => x.collect $ rest.collect m
 
 end
 
-
-inductive HVM_Program
-  | mk : String -> HVM_Program
+inductive HVM_Program | mk : String -> HVM_Program
 
 def HVM_Program.tostring : HVM_Program -> String | .mk s => s ++ "\n"
 
 instance : Repr HVM_Program where reprPrec p _ := p.tostring
-
 
 def compile {s} (e: Expr s) : HVM_Program :=
   let m := (e.linearize).fst.collect (Std.HashMap.empty)
@@ -300,7 +286,6 @@ def ctr : (a:Adt) -> (t:Ty) -> (v: List DataField) -> ((Instance a t v) -> Expr 
 def mkctr (a:Adt) (t) (n:Fin a.Variants.length): Ctr a t a.Variants[n].snd :=
   ctr a t a.Variants[n].snd fun v => Expr.data a n v
 
-
 def CaseMaker (a t res: Ty) (vars : List DataField) : (v:List DataField) -> Type
   | [] => (Expr res) -> (MatchCase a t vars res)
   | DataField.T::vs => (Var t) -> (CaseMaker a t res vars vs)
@@ -313,19 +298,6 @@ def caseMaker (a t res: Ty) (vars: List DataField) : (v: List DataField) -> (Mat
 
 def mkcase  (a:Adt) (t:Ty) {res:Ty} (n:Nat) (p: n<a.Variants.length:= by decide) (vs:List DataField := a.Variants[n].snd): (CaseMaker (a[t]) t res vs vs):=
   caseMaker (a[t]) t res vs vs (fun x => x)
-
-def MatchMaker (a:Adt) (t res:Ty): (varis:List Variant) -> Type
-  | [] => Match a t a.Variants res
-  | vs::vss => (MatchCase (a[t]) t vs.snd res) -> MatchMaker a t res vss
-
-def matchMaker (a:Adt) (t res:Ty): (varis:List Variant) -> (f: Match a t varis res → Match a t a.Variants res) -> MatchMaker a t res varis
-  | [], f => (f Match.nil : Match a t a.Variants res)
-  | vs::vss, f => fun (cs:MatchCase (a[t]) t vs.2 res) => matchMaker a t res vss fun m => f (Match.cons cs m)
-
-def mkmatch (a:Adt) (t res:Ty)
-  : MatchMaker a t res (a.Variants)
-  := matchMaker a t res (a.Variants) fun m => m
-
 
 def fn (name:String) (e:Expr t): Expr t :=
   Expr.fn name e
@@ -382,29 +354,11 @@ macro "data" name:ident "{" ctrs:construction* "}" rest:term : term => do
         c := Lean.Syntax.mkNatLit (c.getNat + 1)
     | _ => _ := ()
 
-
   return (← `(
     let arr : List (String × ( List String)) := [$allLists,*];
     let $name := construc ($(ident2stringlit name)) arr
     $assign
   ))
-
-
--- #eval
---   data list { #cons {a rec} #nil {} }
---   let intnil : Expr (list [int]) := nil
---   let lst : Expr (list [int]) := cons (#22) nil
---   ()
-
-
--- #eval
---   data maybe { #some {a} #none {} }
---   maybe
-
-
--- def LIST := Adt.mk "list" [("CONS",[TT, RR]), ("NIL",[])]
--- def CONS := mkctr LIST int ⟨0, by decide⟩
--- def NIL := mkctr LIST int ⟨1, by decide⟩
 
 
 declare_syntax_cat match_case
@@ -439,17 +393,13 @@ macro "~" argument:term ":" "{" arms:match_case+ "}" : term => do
     $assign
     ))
 
-
-
 #eval
   @fn = lam x -> x + x;
   compile fn
 
-
-
 #eval
   @add = lam x -> lam y -> (x + y);
-  @fn = lam x -> ((add (x)) (x));  -- compiler will duplicate x here for us
+  @fn = lam x -> ((add (x)) (x));
 
-  @main = (fn (#10));               -- literals need to be wrapped with #
+  @main = (fn (#10));
   compile main
