@@ -1,5 +1,6 @@
 import HighScript
 
+-- dub and sup nodes dont interact with the type system
 
 def main :=
 

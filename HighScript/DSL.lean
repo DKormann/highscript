@@ -225,7 +225,7 @@ mutual
       | .app => s!"({a.compile tt} {b.compile tt})"
       | .sup n => s!"&{n}\{{a.compile tt} {b.compile tt}}"
       | .nsup => s!"&\{{a.compile tt} {b.compile tt}}"
-      | .dub n x y => s!"{nl}!&{n}\{{x.name} {y.name}}={a.compile tt}{nl}{b.compile tt}"
+      | .dub n x y => s!"{nl}  !&{n}\{{x.name} {y.name}}={a.compile tt}{nl}  {b.compile tt}"
     | .data adt n i => s!"#{(adt.Variants[n]).1} \{{ i.compile }}"
     | .mmatch x m => s!"~({x.compile}){nl}\{{m.compile tt}{nl}}"
 
@@ -348,11 +348,6 @@ macro:50 a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
 macro:60 a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
 macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
 
-
-
-#check
-  !&0{a b} = #33;
-  a
 
 declare_syntax_cat construction
 syntax "#" ident "{" ident* "}" : construction
