@@ -1,10 +1,11 @@
 import HighScript
 
-
-
 def main :=
 
-  data list {#CONS{a rec} #NIL{}}
+  data list {
+    #CONS{h rec}    -- create mark recursive field with rec
+    #NIL{}
+  }
 
   let a := #1;
   let b := #2;
@@ -12,7 +13,7 @@ def main :=
 
   let nil := NIL;
 
-  let abc := (CONS a $ CONS b $ CONS c NIL) as list [int]
+  let abc := (CONS a (CONS b (CONS c NIL))) as list [int]
 
   let list_match : Expr $ (list [int]) -> int :=
 

@@ -380,24 +380,43 @@ def extty {a:Adt} {t:Ty} (i:Expr $ a[t]) := t
 
 macro "~" argument:term ":" "{" arms:match_case+ "}" : term => do
 
-  let mut assign := ← `(Match.nil)
+  let mut matcher := ← `(.nil)
   let mut c := arms.size
   for arm in arms.reverse do
     match arm with
     |  `(match_case | # $variantname {$fieldvars*} : $bod) =>
       c := c - 1
       let mut arm := ← `((mkcase a t $(Lean.Syntax.mkNatLit c)))
+      let mut bod := bod
       for fieldvar in fieldvars do
-        arm := ← `( $arm (newVar $(ident2stringlit fieldvar)))
-      assign :=  ← `(
-        Match.cons ( ($arm) ($bod))
-        $assign)
+        arm := ← `($arm $fieldvar)
+        bod := ← `(
+          let $fieldvar := Expr.var $fieldvar
+          $bod)
+      arm := ← `($arm $bod)
+      for fieldvar in fieldvars do
+        arm := ← `(
+          let $fieldvar := newVar $(ident2stringlit fieldvar);
+          $arm
+        )
+
+      matcher :=  ← `(
+        .cons $arm $matcher)
     | _ => _ := ()
 
   return  (<- `(
     let arg := $argument
     let a := extadt arg
     let t := extty arg
-    Expr.mmatch arg $
-    $assign
+    Expr.mmatch arg $matcher
     ))
+
+#eval
+  let x := Expr.int 22
+
+  data list {#CONS{a rec} #NIL{}}
+
+  compile $ .fn "main" ~ (CONS (#33) NIL) : {
+    #CONS{h tail}: h
+    #NIL{} : (#44)
+  }
