@@ -4,9 +4,9 @@ import Lean
 import Std.Data.HashMap
 set_option linter.unusedVariables false
 
-inductive DataField : Type
-  | T: DataField
-  | R: DataField
+inductive DataField : (k:Nat) -> Type
+  | T: DataField k
+  | R: (Fin k) -> DataField k
 deriving BEq, Hashable, Repr
 
 

@@ -1,5 +1,22 @@
 import HighScript
 
+
+
+
+def list: Adt :=
+  data list {
+    #CONS{h tail}    -- create mark recursive field with rec
+    #NIL{}
+  }
+  list
+
+#eval list
+
+#eval Repr.reprPrec (arrow int Ty.int) 0
+
+
+
+
 def main :=
 
   data list {
