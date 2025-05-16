@@ -592,77 +592,66 @@ def ident2stringlit (x : Lean.TSyntax `ident) := Lean.Syntax.mkStrLit x.getId.to
 
 
 macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:term : term => do
-  let mut dat := ← `([])
 
-  for ctr in ctrs.reverse do
+  let mut ctrsdata := #[]
+  for ctr in ctrs do
     match ctr with
     | `(construction| #$ctrname { $args* }) =>
-      let mut varmk := ← `([])
-
-      for arg in args.reverse do
+      let mut arglist := #[]
+      for arg in args do
         match arg with
         | `(typed_arg| $arg:ident : $ty:ident) =>
-          let cc := ← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)
-          varmk := ← `( $cc :: $varmk)
+          arglist := arglist.push (arg, ty)
         | _ => Lean.Macro.throwUnsupported
-      dat := ← `( (Variant.mk $(ident2stringlit ctrname) $varmk) :: $dat )
+      ctrsdata := ctrsdata.push (ctrname, arglist)
     | _ => Lean.Macro.throwUnsupported
 
-  dat := ← `(Adt.mk $(ident2stringlit name) $dat )
+  let mut dat := ← `([])
+
+  for (ctrname, ctrargs) in ctrsdata.reverse do
+    let mut varmk := ← `([])
+    for (arg, ty) in ctrargs.reverse do
+      let cc ← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)
+      varmk := ← `( $cc :: $varmk)
+    dat := ← `( (Variant.mk $(ident2stringlit ctrname) $varmk) :: $dat )
 
   let mut dattype := ← `($name)
   for arg in typeargs do dattype ← `($dattype $arg)
 
   let mut c : Nat := 0
-
+  dat := ← `(Adt.mk $(ident2stringlit name) $dat )
   for arg in typeargs.reverse do dat := ← `( fun ($arg : Ty) => $dat )
 
   let mut res := rest
 
-
-  for ctr in ctrs do
+  for (ctrname, vargs) in ctrsdata do
 
     let mut conf: Lean.TSyntax `term := ← `(Instance.nil)
+    let mut tctr := 0
+    let mut targs := #[]
 
-    match ctr with
-    | `(construction| #$ctrname { $vargs* }) =>
-      let mut tctr := 0
-      let mut targs := #[]
+    for arg in typeargs do
+      targs := targs.push $ Lean.Syntax.mkNameLit arg.getId.toString
+    for (arg,ty) in (vargs).reverse do
+      let df ← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)
+      conf ← `(Instance.cons $df $arg $conf)
+    conf ← `(
+      (Expr.data $dattype
+        (Fin.mk $(Lean.Syntax.mkNatLit c) (by decide) : Fin $(Lean.Syntax.mkNatLit ctrs.size))
+        $conf : Expr $ Ty.data $dattype))
+    for (arg,ty) in (vargs).reverse do
+        let argty ← if (ty.getId.toString) == "self" then `(Ty.data $dattype) else `($ty)
+        conf ← `(fun ($arg : Expr $argty) => $conf)
 
-      for arg in typeargs do
-        targs := targs.push $ Lean.Syntax.mkNameLit arg.getId.toString
-      for (varg) in (vargs).reverse do
-        match varg with
-        | `(typed_arg| $arg:ident : $ty:ident) =>
-          let df ← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)
-          conf ← `(Instance.cons $df $arg $conf)
-        | _ => Lean.Macro.throwUnsupported
+    for arg in typeargs.reverse do conf ← if (arg.getId.toString) == "self" then `($conf) else `(fun {$arg : Ty} => $conf)
+    res := ← `( let $ctrname := $conf; $res )
+    c := c + 1
 
-      conf ← `(
-        (Expr.data $dattype
-          (Fin.mk $(Lean.Syntax.mkNatLit c) (by decide) : Fin $(Lean.Syntax.mkNatLit ctrs.size))
-          $conf : Expr $ Ty.data $dattype))
-
-      for (varg) in (vargs).reverse do
-        match varg with
-        | `(typed_arg| $arg:ident : $ty:ident) =>
-          let argty ← if (ty.getId.toString) == "self" then `(Ty.data $dattype) else `($ty)
-          conf ← `(fun ($arg : Expr $argty) => $conf)
-        | _ => Lean.Macro.throwUnsupported
-
-      for arg in typeargs.reverse do conf ← if (arg.getId.toString) == "self" then `($conf) else `(fun {$arg : Ty} => $conf)
-      res := ← `( let $ctrname := $conf; $res )
-      c := c + 1
-    | _ => Lean.Macro.throwUnsupported
-
-
-
-  res := ←  `(
+  return ←  `(
     let $name := $dat;
     $res
   )
 
-  return res
 
 
 
@@ -681,6 +670,11 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
   data union (a) {
     #A{v:a}
     #B{v:string}
+  }
+
+  data listorint () {
+    #orint{v: int}
+    #orstr{v: string}
   }
 
   let a := A (.int 22)
