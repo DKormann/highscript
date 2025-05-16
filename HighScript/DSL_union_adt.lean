@@ -457,8 +457,9 @@
 -- TODO: reimplementing with cleaner ADT
 
 import Lean
-
 import Std.Data.HashMap
+
+-- open Lean
 set_option linter.unusedVariables false
 
 
@@ -542,6 +543,26 @@ mutual
 
 end
 
+def Expr.repr (e:Expr t) : String :=
+  match e with
+  | .nullary $ NullaryOp.intlit n => s!"{n}"
+  | .nullary $ NullaryOp.stringlit s => s!"\"{s}\""
+  | .nullary $ NullaryOp.var v => s!"{v.name}"
+  | .nullary $ NullaryOp.ftag s t => s!"@{s}"
+  | .unary (UnaryOp.lam v) e => s!"λ {v.name} {e.repr}"
+  | .unary (UnaryOp.fn n) e => s!"@{n}"
+  | .unary (UnaryOp.as t) e => s!"{e.repr}"
+  | .binary op a b => match op with
+    | .arith op => s!"({op} {a.repr} {b.repr})"
+    | .app => s!"({a.repr} {b.repr})"
+    | .sup n => s!"&{n}\{{a.repr} {b.repr}}"
+    | .nsup => s!"&\{{a.repr} {b.repr}}"
+    | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr}{b.repr}"
+  | .data adt n i => s!"#{(adt.variants[n]).name} \{}}"
+  --| .mmatch x m => s!"~({x.compile})\{{m.compile}}"
+
+instance : Repr (Expr t) where reprPrec e _ := e.repr
+
 @[match_pattern] def Expr.var (vr:Var t) := Expr.nullary (NullaryOp.var vr)
 @[match_pattern] def Expr.int n := Expr.nullary (.intlit n)
 @[match_pattern] def Expr.string s := Expr.nullary (.stringlit s)
@@ -560,8 +581,12 @@ def Adt.repr (adt: Adt) : String :=
 
 instance : Repr Adt where reprPrec adt _ := adt.repr
 
+
+declare_syntax_cat typed_arg
+syntax ident ":" ident : typed_arg
+
 declare_syntax_cat construction
-syntax "#" ident "{" ident* "}" : construction
+syntax "#" ident "{" typed_arg* "}" : construction
 
 def ident2stringlit (x : Lean.TSyntax `ident) := Lean.Syntax.mkStrLit x.getId.toString
 
@@ -573,40 +598,89 @@ macro "data" name:ident "(" args:ident* ")" "{" ctrs:construction* "}" rest:term
     match ctr with
     | `(construction| #$ctrname { $args* }) =>
       let mut varmk := ← `([])
+
       for arg in args.reverse do
-        let cc := ← if (arg.getId.toString) == "self" then `(DataField.R) else `(DataField.T $arg)
-        varmk := ← `( $cc :: $varmk)
+        match arg with
+        | `(typed_arg| $arg:ident : $ty:ident) =>
+          let cc := ← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)
+          varmk := ← `( $cc :: $varmk)
+        | _ => Lean.Macro.throwUnsupported
       dat := ← `( (Variant.mk $(ident2stringlit ctrname) $varmk) :: $dat )
     | _ => Lean.Macro.throwUnsupported
 
   dat := ← `(Adt.mk $(ident2stringlit name) $dat )
 
-  for arg in args.reverse do dat := ← `( fun ($arg : Ty) => $dat )
+  let mut dattype := ← `($name)
+  for arg in args do dattype ← `($dattype $arg)
+
+  let mut c : Nat := 0
+
+  for arg in args.reverse do
+    dat := ← `( fun ($arg : Ty) => $dat )
+
+  let mut res := rest
 
 
-  let mut res := ←  `(
+  for ctr in ctrs do
+
+    let mut conf: Lean.TSyntax `term := ← `(Instance.nil)
+
+    match ctr with
+    | `(construction| #$ctrname { $vargs* }) =>
+      let mut tctr := 0
+      let mut targs := #[]
+
+      for arg in args do
+        targs := targs.push $ Lean.Syntax.mkNameLit arg.getId.toString
+      for (varg) in (vargs).reverse do
+        match varg with
+        | `(typed_arg| $arg:ident : $ty:ident) =>
+          let df ← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)
+          conf ← `(Instance.cons $df $arg $conf)
+
+        | _ => Lean.Macro.throwUnsupported
+
+      conf ← `(
+        (Expr.data $dattype
+          (Fin.mk $(Lean.Syntax.mkNatLit c) (by decide) : Fin $(Lean.Syntax.mkNatLit ctrs.size))
+          $conf : Expr $ Ty.data $dattype))
+
+      for (varg) in (vargs).reverse do
+        match varg with
+        | `(typed_arg| $arg:ident : $ty:ident) =>
+          let argty ← if (ty.getId.toString) == "self" then `(Ty.data $dattype) else `($ty)
+          conf ← `(fun ($arg : Expr $argty) => $conf)
+        | _ => Lean.Macro.throwUnsupported
+
+      for arg in args.reverse do
+        conf ← if (arg.getId.toString) == "self" then `($conf) else `(fun {$arg : Ty} => $conf)
+
+      res := ← `( let $ctrname := $conf; $res )
+      c := c + 1
+
+    | _ => Lean.Macro.throwUnsupported
+
+
+
+  res := ←  `(
     let $name := $dat;
-    $rest
+    $res
   )
 
   return res
 
 
-def listint : Adt :=
+
+#check
+  data list (a) {#CONS{h:a tail:self} #NIL{}}
+  let res := CONS (Expr.int 22) NIL
+  res
+
+def list (t:Ty) : Adt :=
+
   data list (a) {
-    #CONS{a self}
+    #CONS{h:a tail:self}
     #NIL{}
   }
-  list int
 
-
-def nil : Expr (Ty.data listint) :=
-  Expr.data listint ⟨1, by decide⟩
-
-    Instance.nil
-
-def cons (h :Expr (int)) (tail:Expr (Ty.data listint)) : Expr (Ty.data listint) :=
-  Expr.data listint ⟨0, by decide⟩
-    $ Instance.cons (DataField.T int) h
-      $ Instance.cons (DataField.R) tail
-        Instance.nil
+  let res := CONS (Expr.int 22) NIL
