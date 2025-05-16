@@ -591,7 +591,7 @@ syntax "#" ident "{" typed_arg* "}" : construction
 def ident2stringlit (x : Lean.TSyntax `ident) := Lean.Syntax.mkStrLit x.getId.toString
 
 
-macro "data" name:ident "(" args:ident* ")" "{" ctrs:construction* "}" rest:term : term => do
+macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:term : term => do
   let mut dat := ← `([])
 
   for ctr in ctrs.reverse do
@@ -611,12 +611,11 @@ macro "data" name:ident "(" args:ident* ")" "{" ctrs:construction* "}" rest:term
   dat := ← `(Adt.mk $(ident2stringlit name) $dat )
 
   let mut dattype := ← `($name)
-  for arg in args do dattype ← `($dattype $arg)
+  for arg in typeargs do dattype ← `($dattype $arg)
 
   let mut c : Nat := 0
 
-  for arg in args.reverse do
-    dat := ← `( fun ($arg : Ty) => $dat )
+  for arg in typeargs.reverse do dat := ← `( fun ($arg : Ty) => $dat )
 
   let mut res := rest
 
@@ -630,14 +629,13 @@ macro "data" name:ident "(" args:ident* ")" "{" ctrs:construction* "}" rest:term
       let mut tctr := 0
       let mut targs := #[]
 
-      for arg in args do
+      for arg in typeargs do
         targs := targs.push $ Lean.Syntax.mkNameLit arg.getId.toString
       for (varg) in (vargs).reverse do
         match varg with
         | `(typed_arg| $arg:ident : $ty:ident) =>
           let df ← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)
           conf ← `(Instance.cons $df $arg $conf)
-
         | _ => Lean.Macro.throwUnsupported
 
       conf ← `(
@@ -652,12 +650,9 @@ macro "data" name:ident "(" args:ident* ")" "{" ctrs:construction* "}" rest:term
           conf ← `(fun ($arg : Expr $argty) => $conf)
         | _ => Lean.Macro.throwUnsupported
 
-      for arg in args.reverse do
-        conf ← if (arg.getId.toString) == "self" then `($conf) else `(fun {$arg : Ty} => $conf)
-
+      for arg in typeargs.reverse do conf ← if (arg.getId.toString) == "self" then `($conf) else `(fun {$arg : Ty} => $conf)
       res := ← `( let $ctrname := $conf; $res )
       c := c + 1
-
     | _ => Lean.Macro.throwUnsupported
 
 
@@ -688,6 +683,8 @@ macro "data" name:ident "(" args:ident* ")" "{" ctrs:construction* "}" rest:term
     #B{v:string}
   }
 
-  let a := A (Expr.int 22)
+  let a := A (.int 22)
 
-  B (Expr.string "hello")
+  let b  := B (.string "hello")
+
+  (b: Expr (Ty.data $ union int))
