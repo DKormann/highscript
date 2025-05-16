@@ -592,7 +592,6 @@ def ident2stringlit (x : Lean.TSyntax `ident) := Lean.Syntax.mkStrLit x.getId.to
 
 
 macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:term : term => do
-
   let mut ctrsdata := #[]
   for ctr in ctrs do
     match ctr with
@@ -600,57 +599,45 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
       let mut arglist := #[]
       for arg in args do
         match arg with
-        | `(typed_arg| $arg:ident : $ty:ident) =>
-          arglist := arglist.push (arg, ty)
+        | `(typed_arg| $arg:ident : $ty:ident) => arglist := arglist.push (arg, ty)
         | _ => Lean.Macro.throwUnsupported
       ctrsdata := ctrsdata.push (ctrname, arglist)
     | _ => Lean.Macro.throwUnsupported
 
-  let mut dat := ← `([])
 
-  for (ctrname, ctrargs) in ctrsdata.reverse do
-    let mut varmk := ← `([])
-    for (arg, ty) in ctrargs.reverse do
-      let cc ← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)
-      varmk := ← `( $cc :: $varmk)
-    dat := ← `( (Variant.mk $(ident2stringlit ctrname) $varmk) :: $dat )
-
-  let mut dattype := ← `($name)
-  for arg in typeargs do dattype ← `($dattype $arg)
-
-  let mut c : Nat := 0
-  dat := ← `(Adt.mk $(ident2stringlit name) $dat )
-  for arg in typeargs.reverse do dat := ← `( fun ($arg : Ty) => $dat )
-
-  let mut res := rest
-
-  for (ctrname, vargs) in ctrsdata do
-
-    let mut conf: Lean.TSyntax `term := ← `(Instance.nil)
-    let mut tctr := 0
-    let mut targs := #[]
-
-    for arg in typeargs do
-      targs := targs.push $ Lean.Syntax.mkNameLit arg.getId.toString
-    for (arg,ty) in (vargs).reverse do
-      let df ← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)
-      conf ← `(Instance.cons $df $arg $conf)
-    conf ← `(
-      (Expr.data $dattype
-        (Fin.mk $(Lean.Syntax.mkNatLit c) (by decide) : Fin $(Lean.Syntax.mkNatLit ctrs.size))
-        $conf : Expr $ Ty.data $dattype))
-    for (arg,ty) in (vargs).reverse do
-        let argty ← if (ty.getId.toString) == "self" then `(Ty.data $dattype) else `($ty)
-        conf ← `(fun ($arg : Expr $argty) => $conf)
-
-    for arg in typeargs.reverse do conf ← if (arg.getId.toString) == "self" then `($conf) else `(fun {$arg : Ty} => $conf)
-    res := ← `( let $ctrname := $conf; $res )
-    c := c + 1
+  let dattype := ← typeargs.foldrM (fun arg acc => `($acc $arg)) (← `($name))
 
   return ←  `(
-    let $name := $dat;
-    $res
-  )
+    let $name := $((← typeargs.foldrM
+      (fun arg acc => `(fun ($arg : Ty) => $acc))
+      (← `(Adt.mk $(ident2stringlit name) $(← ctrsdata.foldrM
+        (fun (ctrname, ctrargs) (acc:Lean.TSyntax `term) => do
+          let varmk2 : Lean.TSyntax `term :=
+            ← (ctrargs.foldrM (fun (arg, ty) acc => do
+                return (<- `($(← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)) :: $acc)))
+              (← `([]))
+            )
+          return ← `((Variant.mk $(ident2stringlit ctrname) $varmk2) :: $acc))
+        (← `([])))))
+    ));
+
+    $(← ctrsdata.zipIdx.foldrM (fun ((ctrname, vargs), c) acc =>
+    do return ← `(
+      let $ctrname := $((← typeargs.foldrM
+
+        fun (arg: Lean.TSyntax `ident) acc => do return ← if (arg.getId.toString) == "self" then `($acc) else `(fun {$arg : Ty} => $acc)
+
+        (← vargs.foldrM
+          (fun (arg, ty) acc => do return ← `(fun ($arg : Expr $((← if (ty.getId.toString) == "self" then `(Ty.data $dattype) else `($ty)))) => $acc))
+          (← `((Expr.data $dattype
+            (Fin.mk $(Lean.Syntax.mkNatLit c) (by decide) : Fin $(Lean.Syntax.mkNatLit ctrs.size))
+            $(← vargs.foldrM
+              (fun (arg, ty) acc => do return ← `(Instance.cons $((← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty))) $arg $acc))
+              (← `(Instance.nil)))
+            : Expr $ Ty.data $dattype))))
+      )); $acc ))
+      rest
+    ))
 
 
 
