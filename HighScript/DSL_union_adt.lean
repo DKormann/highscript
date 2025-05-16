@@ -672,15 +672,22 @@ macro "data" name:ident "(" args:ident* ")" "{" ctrs:construction* "}" rest:term
 
 
 #check
-  data list (a) {#CONS{h:a tail:self} #NIL{}}
-  let res := CONS (Expr.int 22) NIL
-  res
-
-def list (t:Ty) : Adt :=
 
   data list (a) {
     #CONS{h:a tail:self}
     #NIL{}
   }
 
-  let res := CONS (Expr.int 22) NIL
+  CONS (Expr.int 22) NIL
+
+
+#check
+
+  data union (a) {
+    #A{v:a}
+    #B{v:string}
+  }
+
+  let a := A (Expr.int 22)
+
+  B (Expr.string "hello")
