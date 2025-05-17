@@ -529,52 +529,89 @@ mutual
     | sup : Nat -> BinaryOp t t t
     | nsup : BinaryOp t t t
     | dub : Nat -> (Var u) -> (Var u) -> BinaryOp u t t
+    | lett : (Var t) -> BinaryOp a a b
 
   inductive Expr : Ty → Type
     | nullary : NullaryOp b -> Expr b
     | unary : UnaryOp a b -> Expr a -> Expr b
     | binary : BinaryOp a b c -> Expr a -> Expr b -> Expr c
     | data : (adt: Adt) -> (n:Fin adt.variants.length) -> (v: Instance adt (adt.variants[n].fields)) → Expr (data adt)
+    | mmatch: (x: Expr (data a)) -> (Match a a.variants res) -> Expr res
 
   inductive Instance : (a: Adt) -> (v: List DataField) -> Type
     | nil : Instance a []
     | cons : (tv: DataField) -> (x: Expr (tv.Ty a)) -> (Instance a xs) -> Instance a (tv::xs)
   deriving Repr
 
+  inductive Match : (a: Adt) -> (vs: List Variant) -> (res:Ty) -> Type
+    | nil : Match a [] res
+    | cons : {v:Variant} -> Match.Case a v.fields res -> Match a xs res -> Match a (v::xs) res
+
+  inductive Match.Case : (a: Adt) -> (vs: List DataField) -> (res:Ty) -> Type
+    | nil : (e:Expr res) -> Match.Case a [] res
+    | cons {df} : Var (df.Ty a) -> Match.Case a xs res -> Match.Case a (df::xs) res
+
+
 end
 
-def Expr.repr (e:Expr t) : String :=
-  match e with
-  | .nullary $ NullaryOp.intlit n => s!"{n}"
-  | .nullary $ NullaryOp.stringlit s => s!"\"{s}\""
-  | .nullary $ NullaryOp.var v => s!"{v.name}"
-  | .nullary $ NullaryOp.ftag s t => s!"@{s}"
-  | .unary (UnaryOp.lam v) e => s!"λ {v.name} {e.repr}"
-  | .unary (UnaryOp.fn n) e => s!"@{n}"
-  | .unary (UnaryOp.as t) e => s!"{e.repr}"
-  | .binary op a b => match op with
-    | .arith op => s!"({op} {a.repr} {b.repr})"
-    | .app => s!"({a.repr} {b.repr})"
-    | .sup n => s!"&{n}\{{a.repr} {b.repr}}"
-    | .nsup => s!"&\{{a.repr} {b.repr}}"
-    | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr}{b.repr}"
-  | .data adt n i => s!"#{(adt.variants[n]).name} \{}}"
-  --| .mmatch x m => s!"~({x.compile})\{{m.compile}}"
 
-instance : Repr (Expr t) where reprPrec e _ := e.repr
+section Expr_fields
 
-@[match_pattern] def Expr.var (vr:Var t) := Expr.nullary (NullaryOp.var vr)
-@[match_pattern] def Expr.int n := Expr.nullary (.intlit n)
-@[match_pattern] def Expr.string s := Expr.nullary (.stringlit s)
-@[match_pattern] def Expr.lam (vr: Var a) (e:Expr b) := Expr.unary (UnaryOp.lam vr) e
-@[match_pattern] def Expr.app (a: Expr (arrow ta tb)) (b:Expr ta) := Expr.binary (.app) a b
-@[match_pattern] def Expr.fn name (bod:Expr t):= Expr.unary (.fn name) bod
-@[match_pattern] def Expr.ftag name (t:Ty) := Expr.nullary (.ftag name t)
-@[match_pattern] def Expr.dub n (a b: Var t) e (res:Expr u) := Expr.binary (.dub n a b ) e res
-@[match_pattern] def Expr.sup n (a b:Expr t) := Expr.binary (.sup n) a b
-@[match_pattern] def Expr.nsup (a b:Expr t) := Expr.binary (.nsup) a b
-@[match_pattern] def Expr.arith op (a b) := Expr.binary (.arith op) a b
+  @[match_pattern] def Expr.var (vr:Var t) := Expr.nullary (NullaryOp.var vr)
+  @[match_pattern] def Expr.int n := Expr.nullary (.intlit n)
+  @[match_pattern] def Expr.string s := Expr.nullary (.stringlit s)
+  @[match_pattern] def Expr.lam (vr: Var a) (e:Expr b) := Expr.unary (UnaryOp.lam vr) e
+  @[match_pattern] def Expr.app (a: Expr (arrow ta tb)) (b:Expr ta) := Expr.binary (.app) a b
+  @[match_pattern] def Expr.fn name (bod:Expr t):= Expr.unary (.fn name) bod
+  @[match_pattern] def Expr.ftag name (t:Ty) := Expr.nullary (.ftag name t)
+  @[match_pattern] def Expr.dub n (a b: Var t) e (res:Expr u) := Expr.binary (.dub n a b ) e res
+  @[match_pattern] def Expr.sup n (a b:Expr t) := Expr.binary (.sup n) a b
+  @[match_pattern] def Expr.nsup (a b:Expr t) := Expr.binary (.nsup) a b
+  @[match_pattern] def Expr.arith op (a b) := Expr.binary (.arith op) a b
 
+end Expr_fields
+
+mutual
+
+  def Expr.repr (e:Expr t) : String :=
+    match e with
+    | .nullary $ NullaryOp.intlit n => s!"{n}"
+    | .nullary $ NullaryOp.stringlit s => s!"\"{s}\""
+    | .nullary $ NullaryOp.var v => s!"{v.name}"
+    | .nullary $ NullaryOp.ftag s t => s!"@{s}"
+    | .unary (UnaryOp.lam v) e => s!"λ {v.name} {e.repr}"
+    | .unary (UnaryOp.fn n) e => s!"@{n}"
+    | .unary (UnaryOp.as t) e => s!"{e.repr}"
+    | .binary op a b => match op with
+      | .arith op => s!"({op} {a.repr} {b.repr})"
+      | .app => s!"({a.repr} {b.repr})"
+      | .sup n => s!"&{n}\{{a.repr} {b.repr}}"
+      | .nsup => s!"&\{{a.repr} {b.repr}}"
+      | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr}{b.repr}"
+      | .lett v => s!"! {v.name} = {a.repr} {b.repr}"
+    | .data adt n i => s!"#{(adt.variants[n]).name} \{{i.repr}}}"
+    | .mmatch x m => s!"~({x.repr})\{{m.repr}}"
+
+  instance : Repr (Expr t) where reprPrec e _ := e.repr
+
+  def Instance.repr (i:Instance a vs) : String :=
+    match i with
+    | .nil => ""
+    | .cons tv x rest => s!"{x.repr} {rest.repr}"
+
+  def Match.Case.repr (m: Match.Case a vs res) : String :=
+    match m with
+    | .nil e => "} : " ++ e.repr
+    | .cons vr rest => s!"{vr.name} {rest.repr}"
+
+  def Match.repr (m:Match a vs res) : String :=
+    match m with
+    | .nil => ""
+    | .cons s rest => s!"\n#\{{s.repr} {rest.repr}"
+
+end
+
+def Expr.compile (e:Expr t) := Expr.repr e
 
 def Adt.repr (adt: Adt) : String :=
   s!"data {adt.name} \{{" ".intercalate $ adt.variants.map (fun v => s!"#{v.name}\{{" ".intercalate $ v.fields.map (fun x => match x with | DataField.R => "self" | DataField.T t => t.repr)}}")}}"
@@ -603,7 +640,6 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
         | _ => Lean.Macro.throwUnsupported
       ctrsdata := ctrsdata.push (ctrname, arglist)
     | _ => Lean.Macro.throwUnsupported
-
 
   let dattype := ← typeargs.foldrM (fun arg acc => `($acc $arg)) (← `($name))
 
@@ -641,7 +677,6 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
 
 
 
-
 #check
 
   data list (a) {
@@ -649,7 +684,26 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
     #NIL{}
   }
 
-  CONS (Expr.int 22) NIL
+  let ls:= CONS (Expr.int 22) NIL
+  ls
+
+
+
+
+
+
+
+
+
+declare_syntax_cat match_case
+syntax "#" ident "{" term* "}" ":" term : match_case
+
+-- declare_syntax_cat match_maker
+-- syntax "~" term ":" "{" match_case+ "}" : match_maker
+
+
+-- macro "~" argument:term ":" "{" arms:match_case+ "}" : term => do
+
 
 
 #check
