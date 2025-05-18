@@ -676,8 +676,7 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
     ))
 
 
-
-#check
+def mm:=
 
   data list (a) {
     #CONS{h:a tail:self}
@@ -687,21 +686,49 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
   let ls:= CONS (Expr.int 22) NIL
 
   let mt := Expr.mmatch ls
-    $ .cons
-      (.cons ⟨"h"⟩ $ .cons ⟨"tail"⟩ $ .nil $ .int 22)
-      (.cons (.nil $ .int 33) .nil)
+    $ .cons (.cons ⟨"h"⟩ $ .cons ⟨"tail"⟩ $ .nil $ .int 22)
+    $ .cons (.nil $ .int 33)
+    .nil
+
+  let mt :=
+    Expr.mmatch ls $
+    Match.cons (
+      let h := .mk "h";
+      .cons h
+      $ let h := Expr.var h;
+      .cons ⟨"tail"⟩ $ .nil $ h)
+    $ .cons (.nil $ .int 33)
+    .nil
 
   mt
 
 
 
+declare_syntax_cat match_case
+syntax "#" ident "{" ident* "}" ":" term : match_case
+
+
+macro "~" argument:term  ":" "{" arms:match_case+ "}" : term => do
+
+  let mut matcher ← `(Match.nil)
+  for arm in arms.reverse do
+    match arm with
+    |  `(match_case | # $variantname { $vars*  } : $bod) =>
+      matcher ← `(Match.cons $(← vars.foldrM (fun (var: (Lean.TSyntax `ident)) acc => do
+        return ← `(
+          let $var := newVar $(ident2stringlit var);
+          Match.Case.cons $var
+          (let $var := Expr.var $var;
+          $acc))
+      ) ((← `(Match.Case.nil $bod)))) $matcher)
+
+    | _ => Lean.Macro.throwUnsupported
+
+  return ← `(Expr.mmatch $argument $matcher)
 
 
 
-
-
-
-#check
+#eval
 
   data list (a) {
     #CONS{h:a tail:self}
@@ -709,15 +736,11 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
   }
 
   let ls:= CONS (Expr.int 22) NIL
-  -- ls
 
-  -- let mt := Expr.mmatch ls
-  --   $ .cons
-  --     (.cons ⟨"h"⟩ $ .cons ⟨"tail"⟩ $ .nil $ .int 22)
-  --     (.cons (.nil $ .int 33) .nil)
-
-
-  -- let mt :
+  let mt := ~ ls : {
+    #CONS{h tail} : .int 244
+    #NIL{} : .int 33
+  }
 
   mt
 
@@ -726,33 +749,20 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
 
 
 
+-- #check
 
+--   data union (a) {
+--     #A{v:a}
+--     #B{v:string}
+--   }
 
-declare_syntax_cat match_case
-syntax "#" ident "{" term* "}" ":" term : match_case
+--   data listorint () {
+--     #orint{v: int}
+--     #orstr{v: string}
+--   }
 
--- declare_syntax_cat match_maker
--- syntax "~" term ":" "{" match_case+ "}" : match_maker
+--   let a := A (.int 22)
 
+--   let b  := B (.string "hello")
 
--- macro "~" argument:term ":" "{" arms:match_case+ "}" : term => do
-
-
-
-#check
-
-  data union (a) {
-    #A{v:a}
-    #B{v:string}
-  }
-
-  data listorint () {
-    #orint{v: int}
-    #orstr{v: string}
-  }
-
-  let a := A (.int 22)
-
-  let b  := B (.string "hello")
-
-  (b: Expr (Ty.data $ union int))
+--   (b: Expr (Ty.data $ union int))
