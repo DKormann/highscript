@@ -507,7 +507,24 @@ structure Var (t: Ty) where
   name: String
   deriving BEq, Hashable, Repr
 
+
+def Var.ty (v:Var t) := t
+
 def newVar (name:String) : Var t := ⟨name⟩
+
+inductive TypedVar | mk : {ty:Ty} -> (Var ty) -> TypedVar
+  deriving Hashable
+
+
+
+def TypedVar.v (v:TypedVar) := match v with | TypedVar.mk v => (v.ty, v.name)
+def TypedVar.var (v:TypedVar) : Var v.v.fst := @Var.mk v.v.1 v.v.2
+def TypedVar.name x := (TypedVar.v x ).2
+def TypedVar.ty x := (TypedVar.v x ).1
+
+
+instance : BEq TypedVar where beq (a b: TypedVar) := a.name == b.name && a.ty == b.ty
+
 
 mutual
 
@@ -551,8 +568,9 @@ mutual
     | nil : (e:Expr res) -> Match.Case a [] res
     | cons {df} : Var (df.Ty a) -> Match.Case a xs res -> Match.Case a (df::xs) res
 
-
 end
+
+
 
 
 section Expr_fields
@@ -676,7 +694,7 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
     ))
 
 
-def mm:=
+#eval
 
   data list (a) {
     #CONS{h:a tail:self}
@@ -728,6 +746,7 @@ macro "~" argument:term  ":" "{" arms:match_case+ "}" : term => do
 
 
 
+
 #eval
 
   data list (a) {
@@ -747,22 +766,166 @@ macro "~" argument:term  ":" "{" arms:match_case+ "}" : term => do
 
 
 
+mutual
+
+  def Expr.replace (v v':String): (e:Expr b) -> Expr b
+    | .var vr => .var (if vr.name == v then newVar v' else vr)
+    | .lam a e => .lam a (if a.name == v then e else e.replace v v')
+    | .unary op e => .unary op (e.replace v v')
+    | .binary op a b => .binary op (a.replace v v') (b.replace v v')
+    | .data adt n i => .data adt n $ i.replace v v'
+    | .mmatch x m => .mmatch (x.replace v v') m
+    | k => k
+
+  def Instance.replace (v v':String):
+    (i:Instance a vs) -> Instance a vs
+    | .nil => .nil
+    | .cons tv x rest => .cons tv (x.replace v v') $ rest.replace v v'
 
 
--- #check
+  def Match.Case.replace (v v': String) :
+    (m:Match.Case a vs res) -> Match.Case a vs res
+    | .nil e => .nil (e.replace v v')
+    | .cons vr rest => .cons (if vr.name == v then newVar v' else vr) $ rest.replace v v'
 
---   data union (a) {
---     #A{v:a}
---     #B{v:string}
---   }
 
---   data listorint () {
---     #orint{v: int}
---     #orstr{v: string}
---   }
+  def Match.replace(v v':String) :
+    (m:Match a vs res) -> Match a vs res
+    | .nil => .nil
+    | .cons x rest => .cons (x.replace v v') $ rest.replace v v'
 
---   let a := A (.int 22)
+  def Expr.resolve  {s} (c: List TypedVar) (a: Expr ta) (b: Expr tb) (fn :Expr ta -> Expr tb -> Expr s) : Expr s :=
+    match c with
+    | [] => fn a b
+    | c::cs =>
+      let (c', c'') := (c.v.2 ++ "1", c.v.2 ++ "2")
+      Expr.dub 0 (newVar c') (newVar c'') (Expr.var $ @Var.mk c.v.1 c.v.2)
+      $ .resolve cs (a.replace c.v.2 c') (b.replace c.v.2 c'') fn
 
---   let b  := B (.string "hello")
 
---   (b: Expr (Ty.data $ union int))
+  def Expr.linearize : (e:Expr b) -> Expr b × List TypedVar
+    | .var vr => (.var vr, [TypedVar.mk vr])
+    | .lam vr a =>
+      let (a, as) := a.linearize
+      (.lam vr a, as.filter (. != (TypedVar.mk vr)))
+    | .unary op a =>
+      let (a, as) := a.linearize
+      (.unary op a, as)
+    | .binary op a b =>
+      let (a, as) := a.linearize
+      let (b, bs) := b.linearize
+      let fn := fun a b => Expr.binary op a b
+      (.resolve (as.filter (bs.contains ·)) a b fn, bs ++ as.filter (! bs.contains ·))
+    | .data adt n i =>
+      let (i, xs, rtd) := i.linearize
+      let ex := rtd.foldl (fun x c =>
+        Expr.dub 0
+          (newVar (c.v.2 ++ "1"))
+          (newVar (c.v.2 ++ "2")) (.var $ c.var) x) (Expr.data adt n i)
+      (ex, xs)
+    -- | .mmatch x m =>
+    --   let (x, xs) := x.linearize
+    --   let (m, rs, os) := m.linearize
+    --   let collisions := xs.filter (rs.contains ·)
+    --   let (x, m) := collisions.foldl (fun (x, m) c =>
+    --     (x.replace c.name $ c.name ++ "1", m.replace c.name $ c.name ++ "2")) (x, m)
+    --   let ex := (collisions ++ os).foldl (fun x c =>
+    --     Expr.dub 0
+    --       (newVar (c.v.2 ++ "1"))
+    --       (newVar (c.v.2 ++ "2")) (.var $ c.var) x) $ Expr.mmatch x m
+    --   (ex, xs ++ rs.filter (! xs.contains ·))
+    | k => (k, [])
+
+
+  def Instance.linearize : (i:Instance a vs) -> Instance a vs × List TypedVar × List TypedVar
+    | .nil => (.nil, .nil, .nil)
+    | .cons tv x rest =>
+      let (x, xs) := x.linearize
+      let (r, rs, rtd) := rest.linearize
+      let collisions := xs.filter (rs.contains ·)
+      let alls := rs ++ xs.filter (! rs.contains ·)
+      let (x,r) := collisions.foldl (fun (x,r) c =>
+        (x.replace c.name $ c.name ++ "1", r.replace c.name $ c.name ++ "2")) (x,r)
+      (.cons tv x r, alls, rtd ++ collisions.filter (! rtd.contains ·))
+
+  -- def Expr.collect
+
+  -- def MatchCase.collect
+
+  -- def Match.collect
+
+end
+
+
+
+macro "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
+macro "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := Expr.fn $(Lean.quote (n.getId.toString)) $val; $body)
+macro:100 "#" n:num : term => `(Expr.int $n)
+macro:100 "#" n:str : term => `(Expr.string $n)
+macro:50 v:term:50 "as" t:term:51 : term => `(Expr.astype $t $v)
+macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := newVar $(Lean.quote (n.getId.toString)); $bod)
+
+macro:50 "!&" l:num "{" a:ident b:ident  "}" "=" c:term:50 ";" d:term:50 : term =>
+  `(
+    let $a := newVar $(Lean.quote (a.getId.toString));
+    let $b := newVar $(Lean.quote (b.getId.toString));
+    Expr.dub $l $a $b $c (
+    let $a := Expr.var $a;
+    let $b := Expr.var $b;
+    $d))
+
+macro:50 "&" l:num "{" a:term:50 b:term:50  "}" : term => `(Expr.sup $l $a $b)
+macro:50 "&" "{" a:term:50 b:term:50  "}" : term => `(Expr.nsup $a $b)
+macro:50 a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
+macro:50 a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
+macro:60 a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
+macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
+
+macro:50 "(" a:term:50 b:term:50 ")" : term => `(Expr.app $a $b)
+
+macro:50 "lam" x:ident ":" t:term "=>" body:term : term => `(
+  let $x := @Var.mk $t $(Lean.quote (x.getId.toString));
+  let binder := (Expr.lam $x)
+  let $x : Expr $t := Expr.var $x;
+  (binder $body)
+)
+macro:50 "lam" x:ident "=>" body:term : term => `(
+  let $x := newVar $(Lean.quote (x.getId.toString));
+  let binder := (Expr.lam $x)
+  let $x := Expr.var $x;
+  (binder $body)
+)
+
+
+
+
+#check
+  let a : Expr int := #22
+
+  let r := a + a
+
+  @fn = lam a => a + a;
+
+  @fnn = lam a : int => a;
+
+  22
+
+
+
+#eval
+
+  data union (a) {
+    #A{v:a}
+    #B{v:string}
+  }
+
+  data listorint () {
+    #orint{v: int}
+    #orstr{v: string}
+  }
+
+  let a := A (.int 22)
+
+  let b  := B (.string "hello")
+
+  (b: Expr (Ty.data $ union int))
