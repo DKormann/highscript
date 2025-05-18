@@ -685,8 +685,41 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
   }
 
   let ls:= CONS (Expr.int 22) NIL
-  ls
 
+  let mt := Expr.mmatch ls
+    $ .cons
+      (.cons ⟨"h"⟩ $ .cons ⟨"tail"⟩ $ .nil $ .int 22)
+      (.cons (.nil $ .int 33) .nil)
+
+  mt
+
+
+
+
+
+
+
+
+
+#check
+
+  data list (a) {
+    #CONS{h:a tail:self}
+    #NIL{}
+  }
+
+  let ls:= CONS (Expr.int 22) NIL
+  -- ls
+
+  -- let mt := Expr.mmatch ls
+  --   $ .cons
+  --     (.cons ⟨"h"⟩ $ .cons ⟨"tail"⟩ $ .nil $ .int 22)
+  --     (.cons (.nil $ .int 33) .nil)
+
+
+  -- let mt :
+
+  mt
 
 
 
