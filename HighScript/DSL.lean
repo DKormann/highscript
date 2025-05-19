@@ -454,14 +454,12 @@ infixl:56 "•" => Expr.app
   (fn x)
 
 
-#eval !x = #22; x
 
 
+-- def is_permut_of(a:List t)(b:List t):
 
-def is_permut_of(a:List t)(b:List t):
-
-inductive SMatch : Ty -> Type
-  | mk : {a:Adt} -> (arg:Expr (.adt a)) -> (m:Match a vs rs) -> SMatch rs
+-- inductive SMatch : Ty -> Type
+--   | mk : {a:Adt} -> (arg:Expr (.adt a)) -> (m:Match a vs rs) -> SMatch rs
 
 
 #eval
