@@ -457,6 +457,32 @@ infixl:56 "•" => Expr.app
 #eval !x = #22; x
 
 
+
+def is_permut_of(a:List t)(b:List t):
+
+inductive SMatch : Ty -> Type
+  | mk : {a:Adt} -> (arg:Expr (.adt a)) -> (m:Match a vs rs) -> SMatch rs
+
+
+#eval
+
+  data list (a) {
+    #CONS{h:a tail:self}
+    #NIL{}
+  }
+
+  let mm : Expr (int) :=
+    Expr.mmatch (@NIL int)
+    $ Match.cons
+      (Match.Case.cons (.mk "h") $ Match.Case.cons (.mk "t") $ Match.Case.nil $ .int 22)
+    $ Match.cons
+      (Match.Case.nil $ .int 33)
+    Match.nil
+
+
+  mm
+
+
 #check
 
   data list (a) {
