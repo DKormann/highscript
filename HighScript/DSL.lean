@@ -100,9 +100,12 @@ mutual
     | cons : (tv: DataField) -> (x: Expr (tv.Ty a)) -> (Instance a xs) -> Instance a (tv::xs)
   deriving Repr
 
+
   inductive Match : (a: Adt) -> (vs: List Variant) -> (res:Ty) -> Type
     | nil : Match a [] res
     | cons : {v:Variant} -> Match.Case a v.fields res -> Match a xs res -> Match a (v::xs) res
+    -- | named_cons: {v:Variant} -> (name:String) -> (p: name == v.name := by decide) ->
+
 
   inductive Match.Case : (a: Adt) -> (vs: List DataField) -> (res:Ty) -> Type
     | nil : (e:Expr res) -> Match.Case a [] res
@@ -110,6 +113,7 @@ mutual
 
 end
 
+def Match.named.cons  {v:Variant} (name:String) (p: name == v.name := by decide) (x:Match.Case a v.fields res) (rest: Match a xs res):= Match.cons x rest
 
 section Expr_fields
 
@@ -145,7 +149,7 @@ mutual
       | .app => s!"({a.repr} {b.repr})"
       | .sup n => s!"&{n}\{{a.repr} {b.repr}}"
       | .nsup => s!"&\{{a.repr} {b.repr}}"
-      | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr}{b.repr}"
+      | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} f{b.repr}"
       | .lett v => s!"! {v.name} = {a.repr} {b.repr}"
     | .data ad n i => s!"#{(ad.variants[n]).name} \{{i.repr}}"
     | .mmatch x m => s!"~({x.repr})\{{m.repr}}"
@@ -165,19 +169,13 @@ mutual
   def Match.repr (m:Match a vs res) : String :=
     match m with
     | .nil => ""
-    | .cons s rest => s!"\n#\{{s.repr} {rest.repr}"
+    | @Match.cons a res xs v s rest => s!"\n#{v.name}\{{s.repr} {rest.repr}"
 
 end
 
 
-
--- def Expr.compile (e:Expr t) := Expr.repr e
-
-def Adt.repr (adt: Adt) : String :=
-  s!"data {adt.name} \{{" ".intercalate $ adt.variants.map (fun v => s!"#{v.name}\{{" ".intercalate $ v.fields.map (fun x => match x with | DataField.R => "self" | DataField.T t => t.repr)}}")}}"
-
+def Adt.repr (adt: Adt) : String := s!"data {adt.name} \{{" ".intercalate $ adt.variants.map (fun v => s!"#{v.name}\{{" ".intercalate $ v.fields.map (fun x => match x with | DataField.R => "self" | DataField.T t => "x")}}")}}"
 instance : Repr Adt where reprPrec adt _ := adt.repr
-
 
 declare_syntax_cat typed_arg
 syntax ident ":" ident : typed_arg
@@ -221,7 +219,7 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
           (fun (arg: Lean.TSyntax `ident) acc => do return ← if (arg.getId.toString) == "self" then `($acc) else `(fun {$arg : Ty} => $acc))
 
           (← vargs.foldrM
-            (fun (arg, ty) acc => do return ← `(fun ($arg : Expr $((← if (ty.getId.toString) == "self" then `(Ty.adt $dattype) else `($ty)))) => $acc))
+            (fun (arg, ty) acc => do return ← `(fun ($arg : Expr $((← if (ty.getId.toString) == "self" then `($dattrep) else `($ty)))) => $acc))
             (← `(
               let exp :Expr $ $dattrep :=
                 (Expr.data $dattype
@@ -233,14 +231,11 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
               )))
         )); $acc )) (← `(
           $rest
-        ))
-    )
-    )
-
-
+        ))))
 
 declare_syntax_cat match_case
 syntax "#" ident "{" ident* "}" ":" term : match_case
+
 
 
 macro "~" argument:term  ":" "{" arms:match_case+ "}" : term => do
@@ -249,14 +244,12 @@ macro "~" argument:term  ":" "{" arms:match_case+ "}" : term => do
   for arm in arms.reverse do
     match arm with
     |  `(match_case | # $variantname { $vars*  } : $bod) =>
-      matcher ← `(Match.cons $(← vars.foldrM (fun (var: (Lean.TSyntax `ident)) acc => do
+      matcher ← `(Match.named.cons (p:=by decide) $(ident2stringlit variantname) $(← vars.foldrM (fun (var: (Lean.TSyntax `ident)) acc => do
         return ← `(
           let $var := newVar $(ident2stringlit var);
           Match.Case.cons $var
           (let $var := Expr.var $var;
-          $acc))
-      ) ((← `(Match.Case.nil $bod)))) $matcher)
-
+          $acc))) ((← `(Match.Case.nil $bod)))) $matcher)
     | _ => Lean.Macro.throwUnsupported
 
   return ← `(Expr.mmatch $argument $matcher)
@@ -278,12 +271,10 @@ mutual
     | .nil => .nil
     | .cons tv x rest => .cons tv (x.replace v v') $ rest.replace v v'
 
-
   def Match.Case.replace (v v': String) :
     (m:Match.Case a vs res) -> Match.Case a vs res
     | .nil e => .nil (e.replace v v')
     | .cons vr rest => .cons (if vr.name == v then newVar v' else vr) $ rest.replace v v'
-
 
   def Match.replace(v v':String) :
     (m:Match a vs res) -> Match a vs res
@@ -362,20 +353,12 @@ mutual
         (x,rest)
       (.cons x rest, xs ++ rs.filter (! xs.contains ·), collisions ++ os.filter (! xs.contains ·))
 
-
   def Expr.collect (m:Std.HashMap String String) : (e:Expr t) -> Std.HashMap String String
-    | .fn name e =>
-      let m := m.insert ("@" ++ name)  ("@" ++ name ++ "=" ++ e.repr)
-      e.collect m
-    | .data ad n i =>
-      let m := m.insert ("data " ++ ad.name) (ad.repr)
-      i.collect m
-    | .mmatch x mt =>
-      x.collect $ mt.collect m
-
+    | .fn name e => e.collect $ m.insert ("@" ++ name)  ("@" ++ name ++ "=" ++ e.repr)
+    | .data ad n i => i.collect $ m.insert ("data " ++ ad.name) (ad.repr)
+    | .mmatch x mt => x.collect $ mt.collect m
     | .unary op e => e.collect m
     | .binary op a b => a.collect (b.collect m)
-
     | _ => m
 
   def Instance.collect (m:Std.HashMap String String) : (i:Instance a vs) -> Std.HashMap String String
@@ -402,11 +385,7 @@ def compile (e:Expr t) : HVM_programm :=
   .mk $ "\n\n".intercalate m.values
 
 
-#eval compile $ .fn "main" (.int 22 )
-
-
 infixr:56 "->" => arrow
-
 
 macro "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
 macro "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := Expr.fn $(Lean.quote (n.getId.toString)) $val; $body)
@@ -439,8 +418,8 @@ macro:50 a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
 macro:60 a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
 macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
 
-macro:50 "(" a:term:50 b:term:50 ")" : term => `(Expr.app $a $b)
-infixl:56 "•" => Expr.app
+
+
 
 macro:50 "lam" x:ident ":" t:term "=>" body:term : term => `(
   let $x := @Var.mk $t $(Lean.quote (x.getId.toString));
@@ -456,6 +435,23 @@ macro:50 "lam" x:ident "=>" body:term : term => `(
 )
 
 
+macro "(" a:ident b:term ")" : term => `(Expr.app $a $b)
+macro "(" a:term b:ident ")" : term => `(Expr.app $a $b)
+macro "(" a:term "(" b:term ")"")" : term => `(Expr.app $a $b)
+macro "(" "(" a:term ")" b:term ")" : term => `(Expr.app $a $b)
+
+infixl:56 "•" => Expr.app
+
+
+#eval
+  ! fn = lam x => x as int;
+  ! x = #22;
+  fn • x
+
+#eval
+  ! fn = lam x => x as int;
+  ! x = #22;
+  (fn x)
 
 
 #eval !x = #22; x
@@ -478,8 +474,6 @@ macro:50 "lam" x:ident "=>" body:term : term => `(
   }
 
   compile $ .fn "main" mt
-
-
 
 
 
@@ -510,15 +504,22 @@ macro:50 "lam" x:ident "=>" body:term : term => `(
 
   let a := A (.int 22)
 
-  let b  := B (.string "hello")
+  let b := B (.string "hello")
 
-  (b: Expr (union int))
+
+  let ffn := fun x => x ++ "ok"
+  let x := "okok"
+  let res := (ffn) x
+
+  (b : (Expr (union int)))
+
+
 
 
 #eval
   data namedtuple (a b) {
     #NAMED{x:a y:b}
   }
-  let a := NAMED (.int 22) (.string "hello")
+  let a := (NAMED (.int 22) (.string "hello"))
 
   a
