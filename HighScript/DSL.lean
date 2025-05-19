@@ -201,39 +201,39 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
       ctrsdata := ctrsdata.push (ctrname, arglist)
     | _ => Lean.Macro.throwUnsupported
 
-  let dattype := ← typeargs.foldrM (fun arg acc => `($acc $arg)) (← `(adtctr))
+  let dattype := ←
+  `($(← `(Adt.mk $(ident2stringlit name) $(← ctrsdata.foldrM
+      (fun (ctrname, ctrargs) (acc:Lean.TSyntax `term) => do
+        return ← `((Variant.mk $(ident2stringlit ctrname) $(← (ctrargs.foldrM
+          (fun (arg, ty) acc => do return (<- `($(← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)) :: $acc)))
+          (← `([]))
+      ))) :: $acc))
+      (← `([]))))));
 
-  return ←  `(
-    let adtctr := $((← typeargs.foldrM
-      (fun arg acc => `(fun ($arg : Ty) => $acc))
-      (← `(Adt.mk $(ident2stringlit name) $(← ctrsdata.foldrM
-        (fun (ctrname, ctrargs) (acc:Lean.TSyntax `term) => do
-          let varmk2 : Lean.TSyntax `term :=
-            ← (ctrargs.foldrM (fun (arg, ty) acc => do
-                return (<- `($(← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty)) :: $acc)))
-              (← `([]))
-            )
-          return ← `((Variant.mk $(ident2stringlit ctrname) $varmk2) :: $acc))
-        (← `([])))))
-    ));
-
+  return ←
+    `(
+    let $name := $((← typeargs.foldrM (fun arg acc => `(fun $arg => $acc)) ((← `(Ty.adt $dattype)))));
     $(← ctrsdata.zipIdx.foldrM (fun ((ctrname, vargs), c) acc =>
-    do return ← `(
-      let $ctrname := $((← typeargs.foldrM
+      do
+      let dattrep ← typeargs.reverse.foldrM (fun arg acc => do return ← `($acc $arg)) name;
+      return ← `(
+        let $ctrname := $((← typeargs.foldrM
+          (fun (arg: Lean.TSyntax `ident) acc => do return ← if (arg.getId.toString) == "self" then `($acc) else `(fun {$arg : Ty} => $acc))
 
-        fun (arg: Lean.TSyntax `ident) acc => do return ← if (arg.getId.toString) == "self" then `($acc) else `(fun {$arg : Ty} => $acc)
-        (← vargs.foldrM
-          (fun (arg, ty) acc => do return ← `(fun ($arg : Expr $((← if (ty.getId.toString) == "self" then `(Ty.adt $dattype) else `($ty)))) => $acc))
-          (← `((Expr.data $dattype
-            (Fin.mk $(Lean.Syntax.mkNatLit c) (by decide) : Fin $(Lean.Syntax.mkNatLit ctrs.size))
-            $(← vargs.foldrM
-              (fun (arg, ty) acc => do return ← `(Instance.cons $((← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty))) $arg $acc))
-              (← `(Instance.nil)))
-            : Expr $ Ty.adt $dattype))))
-      )); $acc )) (← `(
-        let $name := 22;
-        $rest
-      ))
+          (← vargs.foldrM
+            (fun (arg, ty) acc => do return ← `(fun ($arg : Expr $((← if (ty.getId.toString) == "self" then `(Ty.adt $dattype) else `($ty)))) => $acc))
+            (← `(
+              let exp :Expr $ $dattrep :=
+                (Expr.data $dattype
+                  (Fin.mk $(Lean.Syntax.mkNatLit c) (by decide) : Fin $(Lean.Syntax.mkNatLit ctrs.size))
+                  $(← vargs.foldrM
+                    (fun (arg, ty) acc => do return ← `(Instance.cons $((← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty))) $arg $acc))
+                    (← `(Instance.nil))))
+              exp
+              )))
+        )); $acc )) (← `(
+          $rest
+        ))
     )
     )
 
@@ -461,7 +461,7 @@ macro:50 "lam" x:ident "=>" body:term : term => `(
 #eval !x = #22; x
 
 
-#eval
+#check
 
   data list (a) {
     #CONS{h:a tail:self}
@@ -512,4 +512,13 @@ macro:50 "lam" x:ident "=>" body:term : term => `(
 
   let b  := B (.string "hello")
 
-  (b: Expr (adt $ union int))
+  (b: Expr (union int))
+
+
+#eval
+  data namedtuple (a b) {
+    #NAMED{x:a y:b}
+  }
+  let a := NAMED (.int 22) (.string "hello")
+
+  a
