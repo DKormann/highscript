@@ -26,14 +26,6 @@ def Adt.repr (adt: Adt) : String := s!"data {adt.name} \{{" ".intercalate $ adt.
 instance : Repr Adt where reprPrec adt _ := adt.repr
 
 
-#eval
-  let list:= Adt.mk "list" [
-    ("CONS", [DataField.T, DataField.R]),
-    ("NIL", [])
-  ]
-  list
-
-
 inductive Ty
   | int
   | string
@@ -441,6 +433,15 @@ macro "~" argument:term ":" "{" arms:match_case+ "}" : term => do
     let t := extty arg
     Expr.mmatch arg $matcher
     ))
+
+
+#eval
+  let list:= Adt.mk "list" [
+    ("CONS", [DataField.T, DataField.R]),
+    ("NIL", [])
+  ]
+  list
+
 
 #eval
   let x := Expr.int 22
