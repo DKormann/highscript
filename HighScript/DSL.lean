@@ -260,8 +260,6 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
         ))))
 
 
-
-
 declare_syntax_cat match_case
 syntax "#" ident "{" ident* "}" ":" term : match_case
 
@@ -416,7 +414,8 @@ inductive HVM_programm | mk : String -> HVM_programm
 instance: Repr HVM_programm where reprPrec prg _ := match prg with | .mk s => s
 
 def compile (e:Expr t) : HVM_programm :=
-  let m := e.collect Std.HashMap.empty
+  let k := e.linearize.fst
+  let m := k.collect Std.HashMap.empty
   .mk $ "\n\n".intercalate m.values
 
 

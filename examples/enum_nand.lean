@@ -1,20 +1,7 @@
 
+-- this is work in progress of a simple enumerator
+
 import HighScript
-
-
--- macro "@" id:ident "(" args:ident* ")" "=" bod:term ";" rest:term : term =>
---   do
---   let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
---   return (← `(
---   let $id := Expr.fn $(Lean.Syntax.mkStrLit id.getId.toString) ($fn)
---   $rest))
-
-
--- #check
---   @nand(a b) = (a + b);
---   -- let f := lam a => a + a;
---   -- let nn := Expr.fn "nand" $ lam a => a + a;
---   nand
 
 
 def main :=
@@ -35,4 +22,16 @@ def main :=
       #Nil{}: **
     };
 
-  runmain (l2sup • (nand • #1 • #2))
+
+  data myterm () { #Term {term:int id:int}}
+
+  @rootTerm(n) =
+    -- ! &0{n1, n2} = n;
+    (Term n n);
+    -- (n + n);
+
+  -- @lin(a b rest) =
+
+
+  -- runmain (l2sup • (nand • #1 • #2))
+  runmain (rootTerm • #22)
