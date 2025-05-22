@@ -30,92 +30,6 @@ mutual
 
 end
 
-mutual
-  def Adt.decEq (adt1 adt2 : Adt) : Decidable (adt1 = adt2) :=
-    match adt1, adt2 with
-    | ⟨name1, ls1⟩, ⟨name2, ls2⟩ =>
-      match decEq name1 name2 with
-      | isFalse h =>
-        let p := by intro heq; cases heq; contradiction
-        isFalse (p)
-      | isTrue h1 =>
-        match Variant.List.decEq ls1 ls2 with
-        | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-        | isTrue h2 => isTrue (by rw [h1, h2])
-
-  def Ty.decEq (t1 t2 : Ty) : Decidable (t1 = t2) :=
-    match t1, t2 with
-    | .string, .string => isTrue (by rfl)
-    | .arrow a1 b1, x =>
-    match x with
-      | .arrow a2 b2 =>
-        match Ty.decEq a1 a2 with
-        | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-        | isTrue h1 =>
-          match Ty.decEq b1 b2 with
-          | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-          | isTrue h2 => isTrue (by rw [h1, h2])
-      | .int | .string | .adt _ => isFalse (by intro heq; contradiction)
-    | .adt a1, x =>
-      match x with
-      |.adt a2 =>
-        match Adt.decEq a1 a2 with
-        | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-        | isTrue h => isTrue (by rw [h])
-      | .int | .string | .arrow _ _ => isFalse (by intro heq; contradiction)
-    | .int, x => match x with | .int => isTrue (by rfl) | .string | .arrow _ _ | .adt _ => isFalse (by intro heq; contradiction)
-    | .string, x => match x with | .string => isTrue (by rfl) | .int | .arrow _ _ | .adt _ => isFalse (by intro heq; contradiction)
-
-  def Variant.List.decEq (l1 l2: List Variant) : Decidable (l1 = l2) :=
-    match l1, l2 with
-    | [], [] => isTrue (by rfl)
-    | x::xs, y::ys =>
-      match Variant.decEq x y with
-      | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-      | isTrue h1 =>
-        match Variant.List.decEq xs ys with
-        | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-        | isTrue h2 => isTrue (by rw [h1, h2])
-    | [], x::xs | x::xs, [] => isFalse (by intro heq; cases heq)
-
-  def Variant.decEq (v1 v2: Variant) : Decidable (v1 = v2) :=
-    match v1, v2 with
-    | ⟨name1, ls1⟩, ⟨name2, ls2⟩ =>
-      match decEq name1 name2 with
-      | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-      | isTrue h1 =>
-        match DataField.List.decEq ls1 ls2 with
-        | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-        | isTrue h2 => isTrue (by rw [h1, h2])
-
-  def DataField.List.decEq (l1 l2: List DataField) : Decidable (l1 = l2) :=
-    match l1, l2 with
-    | [], [] => isTrue (by rfl)
-    | x::xs, y::ys =>
-      match DataField.decEq x y with
-      | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-      | isTrue h1 =>
-        match DataField.List.decEq xs ys with
-        | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-        | isTrue h2 => isTrue (by rw [h1, h2])
-    | [], x::xs | x::xs, [] => isFalse (by intro heq; cases heq)
-
-  def DataField.decEq (df1 df2: DataField) : Decidable (df1 = df2) :=
-    match df1, df2 with
-    | .R, .R => isTrue (by rfl)
-    | .T t1, .T t2 =>
-      match Ty.decEq t1 t2 with
-      | isFalse h => isFalse (by intro heq; cases heq; contradiction)
-      | isTrue h => isTrue (by rw [h])
-    | .R, .T _ | .T _, .R => isFalse (by intro heq; cases heq)
-
-end
-
-instance : DecidableEq Adt := Adt.decEq
-instance : DecidableEq Ty := Ty.decEq
-instance : DecidableEq (Variant) := Variant.decEq
-instance : DecidableEq (List Variant) := Variant.List.decEq
-
 instance : Repr  Variant where reprPrec v _ := s!"{v.name} \{{" ".intercalate $ v.fields.map (fun x => match x with | DataField.R => "self" | DataField.T t => "x")}}"
 
 open Ty
@@ -137,7 +51,6 @@ structure Var (t: Ty) where
   deriving BEq, Hashable, Repr
 
 def Var.ty (v:Var t) := t
-
 def newVar (name:String) : Var t := ⟨name⟩
 
 inductive TypedVar | mk : {ty:Ty} -> (Var ty) -> TypedVar deriving Hashable
@@ -146,7 +59,6 @@ def TypedVar.v (v:TypedVar) := match v with | TypedVar.mk v => (v.ty, v.name)
 def TypedVar.var (v:TypedVar) : Var v.v.fst := @Var.mk v.v.1 v.v.2
 def TypedVar.name x := (TypedVar.v x ).2
 def TypedVar.ty x := (TypedVar.v x ).1
-
 
 instance : BEq TypedVar where beq (a b: TypedVar) := a.name == b.name && a.ty == b.ty
 
@@ -176,7 +88,6 @@ mutual
     | unary : UnaryOp a b -> Expr a -> Expr b
     | binary : BinaryOp a b c -> Expr a -> Expr b -> Expr c
     | data : (a:Adt) -> (n:Fin a.variants.length) -> (v: Instance a (a.variants[n].fields)) → Expr (.adt a)
-
     | mmatch: (x: Expr (adt a)) -> (Match a a.variants res) -> Expr res
     | umatch: (x: Expr (adt a)) ->
       (Match a vs res) ->
@@ -237,7 +148,7 @@ mutual
       | .nsup => s!"&\{{a.repr} {b.repr}}"
       | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} f{b.repr}"
       | .lett v => s!"! {v.name} = {a.repr} {b.repr}"
-    -- | .data c i => s!"#{(c.adt.variants[c.idx]).name} \{{i.repr}}"
+    | .data c n i => s!"#{c.variants[n].name} \{{i.repr}}"
     | .mmatch x m => s!"~({x.repr})\{{m.repr}}"
     | _ => s!"repr undefined"
 
@@ -263,6 +174,7 @@ end
 
 
 def Adt.repr (adt: Adt) : String := s!"data {adt.name} \{{" ".intercalate $ adt.variants.map (fun v => s!"#{v.name}\{{" ".intercalate $ v.fields.map (fun x => match x with | DataField.R => "self" | DataField.T t => "x")}}")}}"
+
 instance : Repr Adt where reprPrec adt _ := adt.repr
 
 declare_syntax_cat typed_arg
@@ -324,75 +236,26 @@ macro "data" name:ident "(" typeargs:ident* ")" "{" ctrs:construction* "}" rest:
         let $ctrname := $((← typeargs.foldrM
           (fun (arg: Lean.TSyntax `ident) acc => do return ← if (arg.getId.toString) == "self" then `($acc) else `(fun {$arg : Ty} => $acc))
           (← ( do
-            let n ← `(Fin.mk $(Lean.Syntax.mkNatLit c) (by decide)
-            )
+            -- let n ← `(Fin.mk $(Lean.Syntax.mkNatLit c) (by decide) : Fin $(Lean.Syntax.mkNatLit ctrsdata.size));
             let confn := (← vargs.foldrM
               (fun (arg, ty) acc => do return ← `(fun ($arg : Expr $((← if (ty.getId.toString) == "self" then `($dattrep) else `($ty)))) => $acc))
               (← `(
                 let exp :Expr $ $dattrep :=
                   (Expr.data $dattype
-                    $n
+                    (Fin.mk $(Lean.Syntax.mkNatLit c) (by decide) : Fin $(Lean.Syntax.mkNatLit ctrsdata.size))
                     $(← vargs.foldrM
                       (fun (arg, ty) acc => do return ← `(Instance.cons $((← if (ty.getId.toString) == "self" then `(DataField.R) else `(DataField.T $ty))) $arg $acc))
                       (← `(Instance.nil))))
                 exp
                 )))
-            let zuf ← `(Constructor.mk $dattype $n $confn)
-            return zuf
+            -- let zuf ← `(Constructor.mk $dattype $n $confn)
+            -- return zuf
+            return confn
           ))
         )); $acc )) (← `(
           $rest
         ))))
 
-
-
-
-#eval
-  data list () {
-    #CONS{h:int tail:self}
-    #NIL{}
-  }
-
-  let nl : Expr list := NIL.con
-
-  let ls : Expr list := (CONS.con (.int 22) NIL.con)
-  let ls : Expr list := (CONS.con (.int 22) ls)
-  let ls : Expr list := (CONS.con (.int 22) ls)
-  let ls : Expr list := (CONS.con (.int 22) ls)
-
-  ls
-
-
-macro "#" ctr:ident : term =>`(($ctr).con)
-
-#check
-  data list () {
-    #CONS{h:int r:string }
-    #NIL{}
-  }
-
-  (#CONS $ .int 22)
-
-
-
-macro "#" ctr:ident "{" args:term,* "}" : term => do
-  return ← (args.getElems).foldrM
-    (fun arg acc => `($acc $arg))
-    (←`($(ctr).con))
-    -- (← `([]))
-
-
-#check
-  data list () {
-    #CONS{h:int r:int }
-    #NIL{}
-  }
-
-  let nl : Expr $ .adt CONS.adt := NIL.con
-
-  let ls : Expr $ .adt CONS.adt := ( #CONS { (Expr.int 11), (Expr.int 22) } )
-
-  ls
 
 
 
@@ -479,17 +342,17 @@ mutual
           (newVar (c.v.2 ++ "1"))
           (newVar (c.v.2 ++ "2")) (.var $ c.var) x) (Expr.data ad n i)
       (ex, xs)
-    -- | .mmatch x m =>
-      -- let (x, xs) := x.linearize
-      -- let (m, rs, os) := m.linearize
-      -- let collisions := xs.filter (rs.contains ·)
-      -- let (x, m) := collisions.foldl (fun (x, m) c =>
-      --   (x.replace c.name $ c.name ++ "1", m.replace c.name $ c.name ++ "2")) (x, m)
-      -- let ex := (collisions ++ os).foldl (fun x c =>
-      --   Expr.dub 0
-      --     (newVar (c.v.2 ++ "1"))
-      --     (newVar (c.v.2 ++ "2")) (.var $ c.var) x) $ Expr.mmatch x m
-      -- (ex, xs ++ rs.filter (! xs.contains ·))
+    | .mmatch x m =>
+      let (x, xs) := x.linearize
+      let (m, rs, os) := m.linearize
+      let collisions := xs.filter (rs.contains ·)
+      let (x, m) := collisions.foldl (fun (x, m) c =>
+        (x.replace c.name $ c.name ++ "1", m.replace c.name $ c.name ++ "2")) (x, m)
+      let ex := (collisions ++ os).foldl (fun x c =>
+        Expr.dub 0
+          (newVar (c.v.2 ++ "1"))
+          (newVar (c.v.2 ++ "2")) (.var $ c.var) x) $ Expr.mmatch x m
+      (ex, xs ++ rs.filter (! xs.contains ·))
     | k => (k, [])
 
   def Instance.linearize : (i:Instance a vs) -> Instance a vs × List TypedVar × List TypedVar
@@ -589,9 +452,6 @@ section notations
   macro:60 a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
   macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
 
-
-
-
   macro:50 "lam" x:ident ":" t:term "=>" body:term : term => `(
     let $x := @Var.mk $t $(Lean.quote (x.getId.toString));
     let binder := (Expr.lam $x)
@@ -618,7 +478,7 @@ section notations
 end notations
 
 
-#eval !x = #22; x
+-- #eval !x = #22; x
 
 
 -- #check
@@ -759,9 +619,7 @@ end notations
 --   }
 
 --   let a := A (.int 22)
-
 --   let b := B (.string "hello")
-
 
 --   let ffn := fun x => x ++ "ok"
 --   let x := "okok"
