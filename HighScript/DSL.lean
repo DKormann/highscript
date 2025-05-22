@@ -618,6 +618,7 @@ section notations
 end notations
 
 
+#eval !x = #22; x
 
 
 -- #check
