@@ -1,6 +1,7 @@
 import HighScript
 
 
+
 def main :=
 
   data List (a) {
@@ -33,4 +34,4 @@ def main :=
 
   let lens := (len • abc)
 
-  runmain abc
+  runmain (len abc)
