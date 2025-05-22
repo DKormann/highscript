@@ -148,7 +148,7 @@ mutual
       | .app => s!"({a.repr} {b.repr})"
       | .sup n => s!"&{n}\{{a.repr} {b.repr}}"
       | .nsup => s!"&\{{a.repr} {b.repr}}"
-      | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} f{b.repr}"
+      | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} {b.repr}"
       | .lett v => s!"! {v.name} = {a.repr} {b.repr}"
     | .data c n i => s!"#{c.variants[n].name} \{{i.repr}}"
     | .mmatch x m => s!"~({x.repr})\{{m.repr}}"
@@ -446,7 +446,7 @@ section notations
   macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := newVar $(Lean.quote (n.getId.toString)); $bod)
 
 
-  macro:50 "!" "&" l:num "{" a:ident b:ident  "}" "=" c:term:50 ";" d:term:50 : term =>
+  macro:50 "!" "&" l:num "{" a:ident "," b:ident  "}" "=" c:term:50 ";" d:term:50 : term =>
     `(
       let $a := newVar $(Lean.quote (a.getId.toString));
       let $b := newVar $(Lean.quote (b.getId.toString));
@@ -477,7 +477,7 @@ section notations
     | _ => Lean.Macro.throwUnsupported
 
 
-  macro:50 "&" l:num "{" a:term:50 b:term:50  "}" : term => `(Expr.sup $l $a $b)
+  macro:50 "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
   macro:50 "&" "{" a:term:50 "," b:term:50  "}" : term => `(Expr.nsup $a $b)
   macro:50 a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
   macro:50 a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
