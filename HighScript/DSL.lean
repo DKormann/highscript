@@ -88,6 +88,7 @@ mutual
     | unary : UnaryOp a b -> Expr a -> Expr b
     | binary : BinaryOp a b c -> Expr a -> Expr b -> Expr c
     | data : (a:Adt) -> (n:Fin a.variants.length) -> (v: Instance a (a.variants[n].fields)) → Expr (.adt a)
+    | eraser : {t:Ty} -> Expr t
     | mmatch: (x: Expr (adt a)) -> (Match a a.variants res) -> Expr res
     | umatch: (x: Expr (adt a)) ->
       (Match a vs res) ->
@@ -128,6 +129,7 @@ section Expr_fields
   @[match_pattern] def Expr.nsup (a b:Expr t) := Expr.binary (.nsup) a b
   @[match_pattern] def Expr.arith op (a b) := Expr.binary (.arith op) a b
 
+
 end Expr_fields
 
 mutual
@@ -150,6 +152,7 @@ mutual
       | .lett v => s!"! {v.name} = {a.repr} {b.repr}"
     | .data c n i => s!"#{c.variants[n].name} \{{i.repr}}"
     | .mmatch x m => s!"~({x.repr})\{{m.repr}}"
+    | .eraser => "*"
     | _ => s!"repr undefined"
 
 
@@ -417,7 +420,21 @@ def compile (e:Expr t) : HVM_programm :=
   .mk $ "\n\n".intercalate m.values
 
 
+
 section notations
+
+
+  def liststuff :=
+
+    data list (a) {
+      #Cons{h:a tail:self}
+      #Nil{}
+    }
+    (list, fun a => @Cons a, fun a => @Nil a)
+
+  def list := liststuff.1
+  def Cons {a} : (Expr a) -> (Expr (list a) ) -> Expr (list a)  := liststuff.2.1 a
+  def Nil {a} : Expr (list a) := liststuff.2.2 a
 
   infixr:56 "->" => arrow
 
@@ -427,6 +444,7 @@ section notations
   macro:100 "#" n:str : term => `(Expr.string $n)
   macro:50 v:term:50 "as" t:term:51 : term => `(Expr.astype $t $v)
   macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := newVar $(Lean.quote (n.getId.toString)); $bod)
+
 
   macro:50 "!" "&" l:num "{" a:ident b:ident  "}" "=" c:term:50 ";" d:term:50 : term =>
     `(
@@ -445,12 +463,27 @@ section notations
       $bod
       ))
 
+  declare_syntax_cat binder
+  syntax ident : binder
+  syntax ident ":" term : binder
+
+  macro "(binder| " x:binder ")" : term =>  match x with
+    | `(binder| $x:ident) => `(
+      let vr := newVar $(Lean.quote (x.getId.toString));
+      (vr, Expr.var vr))
+    | `(binder| $x:ident : $t:term) => `(
+      let vr := @Var.mk $t $(Lean.quote (x.getId.toString));
+      (vr, Expr.var vr))
+    | _ => Lean.Macro.throwUnsupported
+
+
   macro:50 "&" l:num "{" a:term:50 b:term:50  "}" : term => `(Expr.sup $l $a $b)
-  macro:50 "&" "{" a:term:50 b:term:50  "}" : term => `(Expr.nsup $a $b)
+  macro:50 "&" "{" a:term:50 "," b:term:50  "}" : term => `(Expr.nsup $a $b)
   macro:50 a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
   macro:50 a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
   macro:60 a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
   macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
+  macro:60 "**" :term => `(Expr.eraser)
 
   macro:50 "lam" x:ident ":" t:term "=>" body:term : term => `(
     let $x := @Var.mk $t $(Lean.quote (x.getId.toString));
@@ -458,6 +491,7 @@ section notations
     let $x : Expr $t := Expr.var $x;
     (binder $body)
   )
+
   macro:50 "lam" x:ident "=>" body:term : term => `(
     let $x := newVar $(Lean.quote (x.getId.toString));
     let binder := (Expr.lam $x)
@@ -465,6 +499,13 @@ section notations
     (binder $body)
   )
 
+
+  macro "@" id:ident "(" args:ident* ")" "=" bod:term ";" rest:term : term =>
+    do
+    let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
+    return (← `(
+    let $id := Expr.fn $(Lean.Syntax.mkStrLit id.getId.toString) ($fn)
+    $rest))
 
   macro "(" a:ident b:ident ")" : term => `(Expr.app $a $b)
   -- macro "(" a:ident b:term ")" : term => `(Expr.app $a $b)
@@ -474,9 +515,16 @@ section notations
 
   infixl:56 "•" => Expr.app
 
+  macro "[" a:term,* "]" : term => do return ← a.getElems.foldrM (fun x acc => `(Cons $x $acc)) (← `(Nil))
+
+
 
 end notations
 
+
+#eval
+  @nand = #22;
+  nand
 
 -- #eval !x = #22; x
 
