@@ -25,13 +25,14 @@ def main :=
 
   data myterm () { #Term {term:int id:int}}
 
-  @rootTerm(n) =
-    -- ! &0{n1, n2} = n;
-    (Term n n);
-    -- (n + n);
+  @rootTerm(n) = (Term n n);
 
-  -- @lin(a b rest) =
-
+  @lin (a:int b rest) =
+    -- let a := (a as int);
+   ~(b as list int):{
+    #Cons{h t} : #22
+    #Nil{} : rest
+  }as int;
 
   -- runmain (l2sup • (nand • #1 • #2))
   runmain (rootTerm • #22)

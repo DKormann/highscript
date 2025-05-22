@@ -464,16 +464,16 @@ section notations
 
   declare_syntax_cat binder
   syntax ident : binder
-  syntax ident ":" term : binder
+  syntax "("ident ":" term")" : binder
 
-  macro "(binder| " x:binder ")" : term =>  match x with
-    | `(binder| $x:ident) => `(
-      let vr := newVar $(Lean.quote (x.getId.toString));
-      (vr, Expr.var vr))
-    | `(binder| $x:ident : $t:term) => `(
-      let vr := @Var.mk $t $(Lean.quote (x.getId.toString));
-      (vr, Expr.var vr))
-    | _ => Lean.Macro.throwUnsupported
+  -- macro "(binder| " x:binder ")" : term =>  match x with
+  --   | `(binder| $x:ident) => `(
+  --     let vr := newVar $(Lean.quote (x.getId.toString));
+  --     (vr, Expr.var vr))
+  --   | `(binder| $x:ident : $t:term) => `(
+  --     let vr := @Var.mk $t $(Lean.quote (x.getId.toString));
+  --     (vr, Expr.var vr))
+  --   | _ => Lean.Macro.throwUnsupported
 
 
   macro:50 "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
@@ -484,22 +484,32 @@ section notations
   macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
   macro:60 "**" :term => `(Expr.eraser)
 
-  macro:50 "lam" x:ident ":" t:term "=>" body:term : term => `(
-    let $x := @Var.mk $t $(Lean.quote (x.getId.toString));
-    let binder := (Expr.lam $x)
-    let $x : Expr $t := Expr.var $x;
-    (binder $body)
-  )
+  macro:50 "lam" xs:binder* "=>" body:term : term =>
+    (do
+    return ← xs.foldrM (fun x acc => do
+      let mut varn : Lean.TSyntax `ident ← `(x)
+      let mut varex ← `(x)
+      match x with
+      | `(binder| $x:ident) =>
+        varn := x
+        varex ← `(Var.mk $(Lean.quote (x.getId.toString)))
+      | `(binder| ($x:ident : $t:term)) =>
+        varn := x
+        varex ← `(@Var.mk $t $(Lean.quote (x.getId.toString)))
+      | _ => Lean.Macro.throwUnsupported
+      return ← `(
+        let $varn := $varex;
+        let binder := (Expr.lam $varn)
+        let $varn := Expr.var $varn;
+        (binder $acc)
+      )) (← `($body)
+    ))
 
-  macro:50 "lam" x:ident "=>" body:term : term => `(
-    let $x := newVar $(Lean.quote (x.getId.toString));
-    let binder := (Expr.lam $x)
-    let $x := Expr.var $x;
-    (binder $body)
-  )
 
 
-  macro "@" id:ident "(" args:ident* ")" "=" bod:term ";" rest:term : term =>
+  -- macro:50 "lam" xs:binder+ "=>" body:term : term => do return ← xs.foldrM (fun x acc => `(lam $x => $acc)) (← `($body))
+
+  macro "@" id:ident "(" args:binder* ")" "=" bod:term ";" rest:term : term =>
     do
     let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
     return (← `(
@@ -519,6 +529,7 @@ section notations
 
 
 end notations
+
 
 
 #eval
