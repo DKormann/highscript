@@ -3,9 +3,7 @@
 
 import HighScript
 
-
 def main :=
-
 
   @nand = (lam a => lam b => (#1 - (a * b)));
 
@@ -23,12 +21,12 @@ def main :=
     };
 
 
-  data myterm () { #Term {term:int id:int}}
+  data myterm () {#Term {term:int id:int}}
 
   @rootTerm(n) = (Term n n);
 
-  @lin (a:int b rest) =
-    -- let a := (a as int);
+  @lin ((a:int) b rest) =
+    let a := (a as int);
    ~(b as list int):{
     #Cons{h t} : #22
     #Nil{} : rest

@@ -532,9 +532,85 @@ end notations
 
 
 
+
+inductive WRP : List String -> Type
+  | mk : Match a vs res -> WRP (vs.map (Variant.name))
+
+
+
+mutual
+
+-- def Variant.comp (a b:Variant) :Bool:=
+--   if a.name != b.name then false else
+--   if a.fields.length != b.fields.length then false else
+--   (a.fields.zip b.fields ).all (fun (x,y)=> x.comp y)
+
+-- def DataField.comp (a b:DataField) : Bool :=
+--   match a, b with
+--   | .R, .R => true
+--   | .T t1, .T t2 => t1.comp t2
+--   | _, _ => false
+
+-- def Ty.comp (a b:Ty) : Bool :=
+--   match a, b with
+--   | .int, .int => true
+--   | .string, .string => true
+--   | .arrow a1 b1, .arrow a2 b2 => a1.comp a2 && b1.comp b2
+--   | .adt a, .adt b => a.comp b
+--   | _, _ => false
+
+-- def Adt.comp (a b:Adt) : Bool :=
+--   if a.name != b.name then false else
+--   if a.variants.length != b.variants.length then false else
+--   (a.variants.zip b.variants).all (fun (x,y) => x.comp y)
+
+-- def Variant.comp (a b:Variant) : Type :=
+
+end
+
+def Nat.comp (a b:Nat) :Type:=
+  if a == b then Unit else Empty
+
+
+
+
+
+
 #eval
-  @nand = #22;
-  nand
+
+  data list (a) {
+    #CONS{h:a tail:self}
+    #NIL{}
+  }
+
+  let getadt {a:Adt} : Expr (adt a) -> Adt := fun e => a
+  let adt : Adt := getadt (@NIL int)
+
+  let varis := adt.variants
+
+  let vcons := varis[@Fin.mk 2 0 (by decide)]
+  let vnil := varis[@Fin.mk 2 1 (by decide)]
+
+  let mm
+    :
+    Match adt [vcons, vnil] int
+    :=
+    Match.cons
+      (Match.Case.cons (.mk "h") $ Match.Case.cons (.mk "t") $ Match.Case.nil $ .int 22)
+      $ Match.cons
+        (Match.Case.nil $ .int 33)
+      Match.nil
+
+  let ww : WRP ["CONS", "NIL"] := WRP.mk mm
+
+  -- let p: vcons = vcons := by decide
+  let check : Vari.comp vcons vcons := ()
+
+  let cn : Nat.comp 1 1 := ()
+
+  adt
+
+
 
 -- #eval !x = #22; x
 
