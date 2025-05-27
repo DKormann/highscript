@@ -177,8 +177,9 @@ syntax ident ":" ident : typed_var
 
 declare_syntax_cat construction
 syntax "#" ident "{" typed_var* "}" : construction
+syntax "#" ident : construction
 
-macro "data" name:ident "(" targs:ident* ")" "{" arms:construction* "}" rest:term : term => do
+macro "data" name:ident targs:ident* "{" arms:construction* "}" rest:term : term => do
 
   let mut ctrsdata := #[]
   for ctr in arms do
@@ -190,6 +191,7 @@ macro "data" name:ident "(" targs:ident* ")" "{" arms:construction* "}" rest:ter
           | `(typed_var| $arg:ident : $ty:ident) => arglist := arglist.push (arg, ty)
           | _ => Lean.Macro.throwUnsupported
         ctrsdata := ctrsdata.push (ctrname, arglist)
+      | `(construction| #$ctrname ) => ctrsdata := ctrsdata.push (ctrname, #[])
       | _ => Lean.Macro.throwUnsupported
 
   ctrsdata := ctrsdata.insertionSort (fun (a, _) (b, _) => a.getId.toString < b.getId.toString)
@@ -233,13 +235,16 @@ macro "data" name:ident "(" targs:ident* ")" "{" arms:construction* "}" rest:ter
 
 declare_syntax_cat match_arm
 syntax "#" ident "{" ident* "}" ":" term : match_arm
+syntax "#" ident ":" term : match_arm
 
 macro "~" arg:term ":" "{" arms:match_arm* "}" : term => do
   let mut dat := #[]
   for arm in arms do
     match arm with
-    | `(match_arm| #$variantname { $vars* } : $bod) =>
+    | `(match_arm| # $variantname { $vars* } : $bod) =>
       dat := dat.push (variantname, vars, bod)
+    | `(match_arm| # $variantname : $bod) =>
+      dat := dat.push (variantname, #[], bod)
     | _ => Lean.Macro.throwUnsupported
 
   dat := dat.insertionSort (fun (a, _, _) (b, _, _) => a.getId.toString < b.getId.toString)
@@ -314,7 +319,6 @@ mutual
     | Match.cons name x rest => s!"\n#{name}\{{x.repr} {rest.repr}"
 
 end
-
 
 
 mutual
@@ -447,15 +451,12 @@ def compile (e:Expr t) : HVM_programm :=
   .mk $ "\n\n".intercalate m.values
 
 
-
-
-
 section notations
 
 
   def liststuff :=
 
-    data list (a) {
+    data list a {
       #Cons{h:a tail:self}
       #Nil{}
     }
@@ -548,10 +549,9 @@ section notations
 end notations
 
 
-
 #eval
 
-  data List (a) {
+  data List a {
     #Cons{h:a tail:self}
     #Nil{}
   }
@@ -611,12 +611,12 @@ end notations
 
 #eval
 
-  data union (a b) {
+  data union a b {
     #A{v:a}
     #B{v:b}
   }
 
-  data listorint () {
+  data listorint {
     #orint{v: int}
     #orstr{v: string}
   }
@@ -632,11 +632,11 @@ end notations
 
 
 #eval
-  data namedtuple (a b) {
+  data namedtuple a b {
     #Named {x:a y:b}
   }
 
-  data list (a b) {
+  data list a b {
     #Nil {}
     #Cons {x:a tail:self}
   }

@@ -3,7 +3,7 @@ import HighScript
 
 def main :=
 
-  data List (a) {
+  data List a {
     #Cons{h:a tail:self}    -- mark recursive field with self
     #Nil{}
   }
