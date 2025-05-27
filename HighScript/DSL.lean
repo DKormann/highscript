@@ -38,8 +38,13 @@ mutual
 
   def Variant.repr (v:Variant) : String :=
     match v with
-    | .nil => "nil"
-    | .cons df xs => s!"x {xs.repr}"
+    | .nil => "Variant.nil"
+    | .cons df xs => s!"Variant.cons {xs.repr}"
+
+  def Variant.size (v:Variant) : Nat :=
+    match v with
+    | .nil => 0
+    | .cons _ xs => 1 + xs.size
 
   def Ty.repr (t:Ty) : String :=
     match t with
@@ -267,7 +272,7 @@ mutual
       | .eraser => "*"
     | .unary op e => match op with
       | .lam v => s!"λ {v.name} {e.repr}"
-      | .fn n => s!"@{n} {e.repr}"
+      | .fn n => s!"@{n}"
       | .as t => s!"{e.repr}"
     | .binary op a b => match op with
       | .arith op => s!"({op} {a.repr} {b.repr})"
@@ -276,9 +281,19 @@ mutual
       | .nsup => s!"&\{{a.repr} {b.repr}}"
       | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} {b.repr}"
       | .lett v => s!"! {v.name} = {a.repr} {b.repr}"
-    | @Expr.data a n i => s!"#{(a.adt.get n).name} {n} \{{i.repr}}"
+    | @Expr.data a n i => s!"{(a.adt.get n).name} \{{i.repr}}"
     | .mmatch x m => s!"~({x.repr})\{{m.repr}}"
 
+
+  def Adt.compile (a:Adt) : String :=
+    match a with
+    | .nil => ""
+    | .cons n v r => s!"#{n}\{{v.compile}} {r.compile}"
+
+  def Variant.compile (v:Variant) : String :=
+    match v with
+    | .nil => ""
+    | .cons df xs => s!"x {xs.compile}"
 
   instance : Repr (Expr t) where reprPrec e _ := e.repr
 
@@ -400,7 +415,8 @@ mutual
 
   def Expr.collect (m:Std.HashMap String String) : (e:Expr t) -> Std.HashMap String String
     | .fn name e => e.collect $ m.insert ("@" ++ name)  ("@" ++ name ++ "=" ++ e.repr)
-    | @Expr.data a n i => i.collect $ m.insert ("data " ++ a.name) (a.adt.repr)
+    | .ftag name t => m.insert ("@" ++ name) (t.repr)
+    | @Expr.data a n i => i.collect $ m.insert ("data " ++ a.name) (s!"#{a.name}\{ {a.adt.compile}}")
     | .mmatch x mt => x.collect $ mt.collect m
     | .unary op e => e.collect m
     | .binary op a b => a.collect (b.collect m)
@@ -430,6 +446,18 @@ def compile (e:Expr t) : HVM_programm :=
   let m := k.collect Std.HashMap.empty
   .mk $ "\n\n".intercalate m.values
 
+
+
+#eval
+  data list (a) {
+    #Cons{h:a tail:self}
+    #Nil{}
+  }
+
+  let fn := Expr.fn "main"
+    -- (@Nil int)
+    $ Cons (.int 22) Nil
+  compile fn
 
 
 section notations
@@ -478,16 +506,6 @@ section notations
   syntax ident : binder
   syntax "("ident ":" term")" : binder
 
-  -- macro "(binder| " x:binder ")" : term =>  match x with
-  --   | `(binder| $x:ident) => `(
-  --     let vr := newVar $(Lean.quote (x.getId.toString));
-  --     (vr, Expr.var vr))
-  --   | `(binder| $x:ident : $t:term) => `(
-  --     let vr := @Var.mk $t $(Lean.quote (x.getId.toString));
-  --     (vr, Expr.var vr))
-  --   | _ => Lean.Macro.throwUnsupported
-
-
   macro:50 "&" l:num "{" a:term:50 "," b:term:50  "}" : term => `(Expr.sup $l $a $b)
   macro:50 "&" "{" a:term:50 "," b:term:50  "}" : term => `(Expr.nsup $a $b)
   macro:50 a:term:50 "+" b:term:51 : term => `(Expr.arith "+" $a $b)
@@ -518,9 +536,6 @@ section notations
     ))
 
 
-
-  -- macro:50 "lam" xs:binder+ "=>" body:term : term => do return ← xs.foldrM (fun x acc => `(lam $x => $acc)) (← `($body))
-
   macro "@" id:ident "(" args:binder* ")" "=" bod:term ";" rest:term : term =>
     do
     let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
@@ -528,7 +543,7 @@ section notations
     let $id := Expr.fn $(Lean.Syntax.mkStrLit id.getId.toString) ($fn)
     $rest))
 
-  macro "(" a:ident b:ident ")" : term => `(Expr.app $a $b)
+  -- macro "(" a:ident b:ident ")" : term => `(Expr.app $a $b)
   macro "(" a:ident b:term ")" : term => `(Expr.app $a $b)
   macro "(" a:term b:ident ")" : term => `(Expr.app $a $b)
   macro "(" a:term "(" b:term ")"")" : term => `(Expr.app $a $b)
@@ -541,6 +556,7 @@ section notations
 
 
 end notations
+
 
 
 
