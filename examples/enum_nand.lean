@@ -9,7 +9,7 @@ def main :=
 
   data bool {#True #False}
 
-  data myterm  { #Term {term:int id:int}}
+  data myterm  { #Term term:int id:int}
 
   @nand = (lam a => lam b => (#1 - (a * b)));
 
@@ -21,23 +21,23 @@ def main :=
 
   @l2sup : (list int) -> int;
   @l2sup (ls) =
-    ~(ls as list int):{
-      #Cons{h t}: &{(h as int), (l2sup t)}
-      #Nil{}: **
+    ~(ls as list int) {
+      #Cons h t: &{(h as int), (l2sup t)}
+      #Nil: **
     };
 
 
   @rootTerm(n) = (Term n n);
 
   @lin ((a:int) b rest) =
-    -- let a := (a as int);
-   ~(b as list int):{
-    #Nil{} : rest
-    #Cons{h t} : #22
+
+   ~(b as list int){
+    #Nil : rest
+    #Cons h t : #22
   }as int;
 
 
-  runmain (~False:{
+  runmain ~ False {
     #False : (Term (#33) (#0))
     #True : rootTerm • #22
-  })
+  }

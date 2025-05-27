@@ -4,8 +4,8 @@ import HighScript
 def main :=
 
   data List a {
-    #Cons{h:a tail:self}    -- mark recursive field with self
-    #Nil{}
+    #Cons h:a tail:self    -- mark recursive field with self
+    #Nil
   }
 
   let a := #1;
@@ -17,16 +17,16 @@ def main :=
 
   @len : (List int) -> int;        -- to use recursion we need to declare the function first sadly
   @len = lam (l : (List int)) =>
-    ~ l : {
-      #Cons{h tail} : (#1 + (len • tail ))
-      #Nil{} : #0
+    ~ l {
+      #Cons h tail : (#1 + (len • tail ))
+      #Nil : #0
     };
 
   let list_match : Expr $ (List int) -> int :=
     lam l =>
-      ~ l : {
-        #Cons{h tail} : h
-        #Nil{} : #0
+      ~ l  {
+        #Cons h tail : h
+        #Nil : #0
       }
 
 

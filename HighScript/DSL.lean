@@ -176,22 +176,22 @@ declare_syntax_cat typed_var
 syntax ident ":" ident : typed_var
 
 declare_syntax_cat construction
-syntax "#" ident "{" typed_var* "}" : construction
-syntax "#" ident : construction
+syntax "#" ident typed_var* : construction
+-- syntax "#" ident : construction
 
 macro "data" name:ident targs:ident* "{" arms:construction* "}" rest:term : term => do
 
   let mut ctrsdata := #[]
   for ctr in arms do
     match ctr with
-      | `(construction| #$ctrname { $args* }) =>
+      | `(construction| #$ctrname $args*) =>
         let mut arglist := #[]
         for arg in args do
           match arg with
           | `(typed_var| $arg:ident : $ty:ident) => arglist := arglist.push (arg, ty)
           | _ => Lean.Macro.throwUnsupported
         ctrsdata := ctrsdata.push (ctrname, arglist)
-      | `(construction| #$ctrname ) => ctrsdata := ctrsdata.push (ctrname, #[])
+      -- | `(construction| #$ctrname ) => ctrsdata := ctrsdata.push (ctrname, #[])
       | _ => Lean.Macro.throwUnsupported
 
   ctrsdata := ctrsdata.insertionSort (fun (a, _) (b, _) => a.getId.toString < b.getId.toString)
@@ -234,17 +234,21 @@ macro "data" name:ident targs:ident* "{" arms:construction* "}" rest:term : term
     return ← `(let $name := ($ty); $ctrs)
 
 declare_syntax_cat match_arm
-syntax "#" ident "{" ident* "}" ":" term : match_arm
-syntax "#" ident ":" term : match_arm
+syntax "#" ident ident* ":" term : match_arm
+-- syntax "#" ident ":" term : match_arm
 
-macro "~" arg:term ":" "{" arms:match_arm* "}" : term => do
+declare_syntax_cat braced_term
+syntax ident : braced_term
+syntax "(" term ")" : braced_term
+
+macro "~" arg:braced_term "{" arms:match_arm* "}" : term => do
   let mut dat := #[]
   for arm in arms do
     match arm with
-    | `(match_arm| # $variantname { $vars* } : $bod) =>
+    | `(match_arm| # $variantname $vars* : $bod) =>
       dat := dat.push (variantname, vars, bod)
-    | `(match_arm| # $variantname : $bod) =>
-      dat := dat.push (variantname, #[], bod)
+    -- | `(match_arm| # $variantname : $bod) =>
+    --   dat := dat.push (variantname, #[], bod)
     | _ => Lean.Macro.throwUnsupported
 
   dat := dat.insertionSort (fun (a, _, _) (b, _, _) => a.getId.toString < b.getId.toString)
@@ -262,6 +266,10 @@ macro "~" arg:term ":" "{" arms:match_arm* "}" : term => do
     )
     (← `(Match.nil))
 
+  let arg ← match arg with
+    | `(braced_term| $arg:ident) => `($arg)
+    | `(braced_term| ( $arg:term) ) => `($arg)
+    | _ => Lean.Macro.throwUnsupported
   return ← `(Expr.mmatch $arg $(matcher))
 
 def eint(n):= Expr.nullary $ .intlit n
@@ -457,8 +465,8 @@ section notations
   def liststuff :=
 
     data list a {
-      #Cons{h:a tail:self}
-      #Nil{}
+      #Cons h:a tail:self
+      #Nil
     }
     (list, fun a => @Cons a, fun a => @Nil a)
 
@@ -552,8 +560,8 @@ end notations
 #eval
 
   data List a {
-    #Cons{h:a tail:self}
-    #Nil{}
+    #Cons h:a tail:self
+    #Nil
   }
 
   let a := .int 1;
@@ -565,15 +573,15 @@ end notations
 
   @len : (List int) -> int;
   @len = lam (l : (List int)) =>
-    ~ l : {
-      #Cons{h tail} : (#1 + (len • tail ))
-      #Nil{} : #0
+    ~ l  {
+      #Cons h tail : (#1 + (len • tail ))
+      #Nil : #0
     };
 
   ((lam (l : (List int)) =>
-    ~ l : {
-      #Cons{h tail} : (#1 + (len • tail ))
-      #Nil{} : #0
+    ~ l  {
+      #Cons h tail : (#1 + (len • tail ))
+      #Nil : #0
     }).linearize.fst.collect Std.HashMap.empty)
 
 
@@ -589,9 +597,14 @@ end notations
 
   let nil :Expr $ list int := Nil
 
-  let mm : Expr int := ~ nil : {
-    #Nil {} : .int 22
-    #Cons {x tail} : .int 33
+  let mm : Expr int := ~ nil {
+    #Nil  : .int 22
+    #Cons x tail : .int 33
+  }
+
+  let mm : Expr int := ~ (@Nil int) {
+    #Nil : .int 22
+    #Cons x tail : .int 33
   }
 
   mm
@@ -612,13 +625,13 @@ end notations
 #eval
 
   data union a b {
-    #A{v:a}
-    #B{v:b}
+    #A v:a
+    #B v:b
   }
 
   data listorint {
-    #orint{v: int}
-    #orstr{v: string}
+    #orint v: int
+    #orstr v: string
   }
 
   let a : Expr $ union int string := A (.int 22)
@@ -633,12 +646,12 @@ end notations
 
 #eval
   data namedtuple a b {
-    #Named {x:a y:b}
+    #Named x:a y:b
   }
 
   data list a b {
-    #Nil {}
-    #Cons {x:a tail:self}
+    #Nil
+    #Cons x:a tail:self
   }
 
   let a := (Named (#22) (#"hello"))
