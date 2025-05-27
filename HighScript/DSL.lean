@@ -477,7 +477,7 @@ section notations
   infixr:56 "->" => arrow
 
   macro "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
-  macro "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := Expr.fn $(Lean.quote (n.getId.toString)) $val; $body)
+  -- macro "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := Expr.fn $(Lean.quote (n.getId.toString)) $val; $body)
   macro:100 "#" n:num : term => `(Expr.int $n)
   macro:100 "#" n:str : term => `(Expr.string $n)
   macro:50 v:term:50 "as" t:term:51 : term => `(Expr.astype $t $v)
@@ -534,19 +534,43 @@ section notations
       )) (← `($body)
     ))
 
-
-  macro "@" id:ident "(" args:binder* ")" "=" bod:term ";" rest:term : term =>
+  -- this macro creates possibly recursive functions
+  macro "@" id:ident args:binder* "=" bod:term ";" rest:term : term =>
     do
     let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
+
+    let mut fargs := #[]
+    let mut wild_args := #[]
+
+    for arg in args do
+      match arg with
+      | `(binder| $x:ident) =>
+          fargs := fargs.push (← `($x))
+          wild_args := wild_args.push x
+      | `(binder| ($x:ident : $t:term)) =>
+          fargs := fargs.push t
+      | _ => Lean.Macro.throwUnsupported
+
+    let mut ftag : Lean.TSyntax `term ← fargs.foldrM
+      (fun arg acc => do return ← `($arg -> $acc))
+      (← `(res))
+
+    ftag :=  ← wild_args.foldrM
+      (fun x (acc : Lean.TSyntax `term) => do return ← `( fun {$x : Ty} => $acc))
+      (← `(fun {res:Ty} => Expr.ftag "fun" $ftag))
+
     return (← `(
+    let $id := $ftag
     let $id := Expr.fn $(Lean.Syntax.mkStrLit id.getId.toString) ($fn)
     $rest))
 
-  -- macro "(" a:ident b:ident ")" : term => `(Expr.app $a $b)
-  macro "(" a:ident b:term ")" : term => `(Expr.app $a $b)
-  macro "(" a:term b:ident ")" : term => `(Expr.app $a $b)
-  macro "(" a:term "(" b:term ")"")" : term => `(Expr.app $a $b)
-  macro "(" "(" a:term ")" b:term ")" : term => `(Expr.app $a $b)
+  macro "(" a:ident b:ident ")" : term => `(Expr.app $a $b)
+  -- macro "(" a:ident b:term ")" : term => `(Expr.app $a $b)
+  -- macro "(" a:term b:ident ")" : term => `(Expr.app $a $b)
+  macro "(" a:term b:term ")" : term => `(Expr.app $a $b)
+  -- macro "(" a:term "(" b:term ")"")" : term => `(Expr.app $a $b)
+  -- macro "(" "(" a:term ")" b:term ")" : term => `(Expr.app $a $b)
+
 
   infixl:56 "•" => Expr.app
 
@@ -555,6 +579,16 @@ section notations
 
 
 end notations
+
+
+#check
+
+
+
+  @len (l :  int) k = (len • k • (#0));
+
+  len
+
 
 
 #eval
@@ -571,20 +605,13 @@ end notations
 
   let abc := (Cons a (Cons b (Cons c Nil))) as (List int)
 
-  @len : (List int) -> int;
-  @len = lam (l : (List int)) =>
-    ~ l  {
-      #Cons h tail : (#1 + (len • tail ))
+  @len (l : List int)  =
+    ~l {
+      #Cons h tail : #1 + (len • tail)
       #Nil : #0
     };
 
-  ((lam (l : (List int)) =>
-    ~ l  {
-      #Cons h tail : (#1 + (len • tail ))
-      #Nil : #0
-    }).linearize.fst.collect Std.HashMap.empty)
-
-
+  compile len
 
 #eval
 
@@ -602,13 +629,17 @@ end notations
     #Cons x tail : .int 33
   }
 
-  let mm : Expr int := ~ (@Nil int) {
+  let mm : Expr int := ~ (Nil as list int) {
     #Nil : .int 22
     #Cons x tail : .int 33
   }
 
   mm
 
+
+#eval
+  ! x = Cons (#22) Nil;
+  x
 
 #check
   let a : Expr int := #22

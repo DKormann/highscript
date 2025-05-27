@@ -2,9 +2,8 @@ import HighScript
 
 
 def main :=
-
-  data List a {
-    #Cons h:a tail:self    -- mark recursive field with self
+  data List a{
+    #Cons h:a tail:self
     #Nil
   }
 
@@ -12,23 +11,22 @@ def main :=
   let b := #2;
   let c := #3;
 
+  runmain $
 
-  let abc := (Cons a (Cons b (Cons c Nil))) as (List int)
+  ! x = Cons (#22) Nil;
 
-  @len : (List int) -> int;        -- to use recursion we need to declare the function first sadly
-  @len = lam (l : (List int)) =>
-    ~ l {
-      #Cons h tail : (#1 + (len • tail ))
-      #Nil : #0
-    };
+  ! abc = (Cons a (Cons b (Cons c Nil)));
 
-  let list_match : Expr $ (List int) -> int :=
-    lam l =>
-      ~ l  {
-        #Cons h tail : h
-        #Nil : #0
-      }
+  @gethead lst = ~(lst as List int) {
+    #Cons h tail : h
+    #Nil : #0
+  };
 
+  @len (lst : List int) =
+  ~(lst) {
+    #Cons h tail : (#1 + (len  tail))
+    #Nil : #0
+  }
+  ;
 
-
-  runmain ((len abc) + (list_match abc))
+  (len abc) + (gethead abc)
