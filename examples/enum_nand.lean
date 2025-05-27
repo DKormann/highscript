@@ -1,7 +1,8 @@
 
 -- this is work in progress of a simple enumerator
-
 import HighScript
+
+set_option linter.unusedVariables false
 
 
 def main :=
@@ -27,7 +28,7 @@ def main :=
 
   @rootTerm(n) = (Term n n);
 
-  @lin (a:int b rest) =
+  @lin ((a:int) b rest) =
     -- let a := (a as int);
    ~(b as list int):{
     #Cons{h t} : #22

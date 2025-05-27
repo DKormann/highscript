@@ -157,6 +157,7 @@ section Expr_fields
   @[match_pattern] def Expr.int n := Expr.nullary (.intlit n)
   @[match_pattern] def Expr.string s := Expr.nullary (.stringlit s)
   @[match_pattern] def Expr.ftag name (t:Ty) := Expr.nullary (.ftag name t)
+  @[match_pattern] def Expr.eraser : Expr t := Expr.nullary (.eraser)
   @[match_pattern] def Expr.astype (t:Ty) (e:Expr t) := Expr.unary (.as t) e
   @[match_pattern] def Expr.lam (vr: Var a) (e:Expr b) := Expr.unary (UnaryOp.lam vr) e
   @[match_pattern] def Expr.fn name (bod:Expr t):= Expr.unary (.fn name) bod
@@ -281,7 +282,7 @@ mutual
       | .nsup => s!"&\{{a.repr} {b.repr}}"
       | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} {b.repr}"
       | .lett v => s!"! {v.name} = {a.repr} {b.repr}"
-    | @Expr.data a n i => s!"{(a.adt.get n).name} \{{i.repr}}"
+    | @Expr.data a n i => s!"#{(a.adt.get n).name} \{{i.repr}}"
     | .mmatch x m => s!"~({x.repr})\{{m.repr}}"
 
 
@@ -414,9 +415,8 @@ mutual
       (.cons v x rest, xs ++ rs.filter (! xs.contains ·), collisions ++ os.filter (! xs.contains ·))
 
   def Expr.collect (m:Std.HashMap String String) : (e:Expr t) -> Std.HashMap String String
-    | .fn name e => e.collect $ m.insert ("@" ++ name)  ("@" ++ name ++ "=" ++ e.repr)
-    | .ftag name t => m.insert ("@" ++ name) (t.repr)
-    | @Expr.data a n i => i.collect $ m.insert ("data " ++ a.name) (s!"#{a.name}\{ {a.adt.compile}}")
+    | .fn name e => e.collect $ m.insert ("@" ++ name) ("@" ++ name ++ "=" ++ e.repr)
+    | @Expr.data a n i => i.collect $ m.insert ("data " ++ a.name) (s!"data {a.name}\{ {a.adt.compile}}")
     | .mmatch x mt => x.collect $ mt.collect m
     | .unary op e => e.collect m
     | .binary op a b => a.collect (b.collect m)
@@ -448,16 +448,6 @@ def compile (e:Expr t) : HVM_programm :=
 
 
 
-#eval
-  data list (a) {
-    #Cons{h:a tail:self}
-    #Nil{}
-  }
-
-  let fn := Expr.fn "main"
-    -- (@Nil int)
-    $ Cons (.int 22) Nil
-  compile fn
 
 
 section notations
@@ -558,6 +548,33 @@ section notations
 end notations
 
 
+
+#eval
+
+  data List (a) {
+    #Cons{h:a tail:self}
+    #Nil{}
+  }
+
+  let a := .int 1;
+  let b := .int 2;
+  let c := .int 3;
+
+
+  let abc := (Cons a (Cons b (Cons c Nil))) as (List int)
+
+  @len : (List int) -> int;
+  @len = lam (l : (List int)) =>
+    ~ l : {
+      #Cons{h tail} : (#1 + (len • tail ))
+      #Nil{} : #0
+    };
+
+  ((lam (l : (List int)) =>
+    ~ l : {
+      #Cons{h tail} : (#1 + (len • tail ))
+      #Nil{} : #0
+    }).linearize.fst.collect Std.HashMap.empty)
 
 
 

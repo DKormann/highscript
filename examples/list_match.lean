@@ -1,15 +1,6 @@
 import HighScript
 
 
-
-#eval
-  data List (a) {
-    #Cons{h:a tail:self}
-    #Nil{}
-  }
-
-  List
-
 def main :=
 
   data List (a) {
@@ -38,8 +29,6 @@ def main :=
         #Nil{} : #0
       }
 
-  let matched := (list_match abc)
 
-  let lens := (len • abc)
 
-  runmain (len abc)
+  runmain ((len abc) + (list_match abc))
