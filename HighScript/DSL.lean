@@ -140,7 +140,7 @@ mutual
     | cons : (v:Expr $ match vo with | .none => a.Ty | .some x => x) -> Instance a xs -> Instance a (Variant.cons vo xs)
 
   inductive MatchCase : (arg: NamedAdt) -> (done: Variant) -> (res:Ty) -> Type
-    | nil : Expr res -> MatchCase arg done res
+    | nil : Expr res -> MatchCase arg Variant.nil res
     | cons {df : Option Ty} : (v:Var $ match df with | .none => arg.Ty | .some x =>x ) ->
       MatchCase arg xs res -> MatchCase arg (Variant.cons df xs) res
 

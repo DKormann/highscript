@@ -7,9 +7,14 @@ set_option linter.unusedVariables false
 
 def main :=
 
-  data bool {#True #False}
+  data bool{
+    #True
+    #False
+  }
 
-  data myterm  { #Term term:int id:int}
+  data term {
+    #Term bod:int id:int
+  }
 
   @nand = (lam a => lam b => (#1 - (a * b)));
 
@@ -22,16 +27,17 @@ def main :=
   @l2sup : (list int) -> int;
   @l2sup ls =
     ~(ls as list int) {
-      #Cons h t: &{(h as int), (l2sup t)}
+      #Cons h t: &{(h as int), l2sup • t}
       #Nil: **
     };
 
 
+
   @rootTerm n = (Term n n);
 
-  @lin (a:int) b rest =
+  @lin (a:int) (b: list int) rest =
 
-   ~(b as list int){
+   ~b{
     #Nil : rest
     #Cons h t : #22
   }as int;

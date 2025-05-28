@@ -1,6 +1,10 @@
 import HighScript
 
 
-def main :=
-  @main = lam x => x as (int -> int);
-  runHVM main
+def main : IO Unit :=
+
+  @add x y = x + y;
+
+  @fn x = add • x • x;
+
+  runmain (fn (#10))
