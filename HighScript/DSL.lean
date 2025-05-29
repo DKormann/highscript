@@ -5,7 +5,6 @@ import Std.Tactic
 
 set_option linter.unusedVariables false
 
-
 mutual
 
   inductive Adt
@@ -129,7 +128,7 @@ mutual
     | unary : UnaryOp a b -> Expr a -> Expr b
     | binary : BinaryOp a b c -> Expr a -> Expr b -> Expr c
     | data : {a:NamedAdt} -> (n:Nat) -> Instance a (a.adt.get n).v -> Expr a.Ty
-    | mmatch : {a:NamedAdt} -> Expr a.Ty -> (css : Match a (a.adt.variants.map (NamedVariant.name)) (a.adt.variants.map (NamedVariant.v)) res) -> Expr res
+    | mmatch : {a:NamedAdt} -> Expr a.Ty -> (shared: List TypedVar := []) -> (css : Match a (a.adt.variants.map (NamedVariant.name)) (a.adt.variants.map (NamedVariant.v)) res) -> Expr res
 
   inductive Match : NamedAdt -> List String -> List Variant -> Ty -> Type
     | nil : Match a [] [] res
@@ -241,14 +240,18 @@ declare_syntax_cat braced_term
 syntax ident : braced_term
 syntax "(" term ")" : braced_term
 
+def parse_braced_term (arg: Lean.TSyntax `braced_term) : Lean.MacroM (Lean.TSyntax `term) := do
+  match arg with
+  | `(braced_term| $x:ident) => return ← `($x)
+  | `(braced_term| ($x:term)) => return x
+  | _ => Lean.Macro.throwUnsupported
+
 macro "~" arg:braced_term "{" arms:match_arm* "}" : term => do
   let mut dat := #[]
   for arm in arms do
     match arm with
     | `(match_arm| # $variantname $vars* : $bod) =>
       dat := dat.push (variantname, vars, bod)
-    -- | `(match_arm| # $variantname : $bod) =>
-    --   dat := dat.push (variantname, #[], bod)
     | _ => Lean.Macro.throwUnsupported
 
   dat := dat.insertionSort (fun (a, _, _) (b, _, _) => a.getId.toString < b.getId.toString)
@@ -266,16 +269,13 @@ macro "~" arg:braced_term "{" arms:match_arm* "}" : term => do
     )
     (← `(Match.nil))
 
-  let arg ← match arg with
-    | `(braced_term| $arg:ident) => `($arg)
-    | `(braced_term| ( $arg:term) ) => `($arg)
-    | _ => Lean.Macro.throwUnsupported
-  return ← `(Expr.mmatch $arg $(matcher))
+  let arg ← parse_braced_term arg
+  return ← `(Expr.mmatch $arg [] $(matcher))
 
 def eint(n):= Expr.nullary $ .intlit n
 
-mutual
 
+mutual
   def Expr.repr (e:Expr t) : String :=
     match e with
     | .nullary op => match op with
@@ -296,7 +296,7 @@ mutual
       | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} {b.repr}"
       | .lett v => s!"! {v.name} = {a.repr} {b.repr}"
     | @Expr.data a n i => s!"#{(a.adt.get n).name} \{{i.repr}}"
-    | .mmatch x m => s!"~({x.repr})\{{m.repr}}"
+    | .mmatch x s m => s!"~({x.repr}) {" ".intercalate (s.map ("!"++TypedVar.name . ))} \{{m.repr}}"
 
 
   def Adt.compile (a:Adt) : String :=
@@ -337,7 +337,7 @@ mutual
     | .unary op e => .unary op (e.replace v v')
     | .binary op a b => .binary op (a.replace v v') (b.replace v v')
     | .data n i => .data n $ i.replace v v'
-    | .mmatch x m => .mmatch (x.replace v v') m
+    | .mmatch x s m => .mmatch (x.replace v v') s m
     | k => k
 
   def Instance.replace (v v':String):
@@ -383,16 +383,16 @@ mutual
           (newVar (c.name ++ "1"))
           (newVar (c.name ++ "2")) (.var $ c.v) x) (Expr.data n i)
       (ex, xs)
-    | .mmatch x m =>
+    | .mmatch x s m =>
       let (x, xs) := x.linearize
       let (m, rs, os) := m.linearize
-      let collisions := xs.filter (rs.contains ·)
+      let collisions := xs.filter rs.contains
       let (x, m) := collisions.foldl (fun (x, m) c =>
         (x.replace c.name $ c.name ++ "1", m.replace c.name $ c.name ++ "2")) (x, m)
-      let ex := (collisions ++ os).foldl (fun x c =>
+      let ex := collisions.foldl (fun x c =>
         Expr.dub 0
           (newVar (c.name ++ "1"))
-          (newVar (c.name ++ "2")) (.var $ c.v) x) $ Expr.mmatch x m
+          (newVar (c.name ++ "2")) (.var $ c.v) x) $ Expr.mmatch x (s++os) m
       (ex, xs ++ rs.filter (! xs.contains ·))
     | k => (k, [])
 
@@ -421,15 +421,15 @@ mutual
       let (x, xs) := x.linearize
       let (rest, rs, os) := rest.linearize
       let collisions := xs.filter (rs.contains ·)
-      let (x, rest) := collisions.foldl
-        (fun (x, r) c => (x.replace c.name $ c.name ++ "1", r.replace c.name $ c.name ++ "2"))
-        (x,rest)
+      -- let (x, rest) := collisions.foldl
+      --   (fun (x, r) c => (x.replace c.name $ c.name ++ "1", r.replace c.name $ c.name ++ "2"))
+      --   (x,rest)
       (.cons v x rest, xs ++ rs.filter (! xs.contains ·), collisions ++ os.filter (! xs.contains ·))
 
   def Expr.collect (m:Std.HashMap String String) : (e:Expr t) -> Std.HashMap String String
     | .fn name e => e.collect $ m.insert ("@" ++ name) ("@" ++ name ++ "=" ++ e.repr)
     | @Expr.data a n i => i.collect $ m.insert ("data " ++ a.name) (s!"data {a.name}\{ {a.adt.compile}}")
-    | .mmatch x mt => x.collect $ mt.collect m
+    | .mmatch x s mt => x.collect $ mt.collect m
     | .unary op e => e.collect m
     | .binary op a b => a.collect (b.collect m)
     | _ => m
@@ -476,7 +476,7 @@ section notations
 
   infixr:56 "->" => arrow
 
-  macro "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
+  -- macro "@" n:ident ":" typ:term:50 "; " body:term:50 : term=> `(let $n := Expr.ftag $(Lean.quote (n.getId.toString)) $typ; $body)
   -- macro "@" n:ident "=" val:term:50 "; " body:term:50 : term=> `(let $n := Expr.fn $(Lean.quote (n.getId.toString)) $val; $body)
   macro:100 "#" n:num : term => `(Expr.int $n)
   macro:100 "#" n:str : term => `(Expr.string $n)
@@ -534,14 +534,14 @@ section notations
       )) (← `($body)
     ))
 
-  -- this macro creates possibly recursive functions
-  macro "@" id:ident args:binder* "=" bod:term ";" rest:term : term =>
-    do
-    let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
+  declare_syntax_cat funterm
+  syntax ":" ident : funterm
 
+  abbrev term := Lean.TSyntax `term
+
+  def parsebinders (args: Lean.TSyntaxArray `binder) :  Lean.MacroM $ (Array $ Lean.TSyntax `ident) × (Array term) := do
     let mut fargs := #[]
     let mut wild_args := #[]
-
     for arg in args do
       match arg with
       | `(binder| $x:ident) =>
@@ -550,6 +550,11 @@ section notations
       | `(binder| ($x:ident : $t:term)) =>
           fargs := fargs.push t
       | _ => Lean.Macro.throwUnsupported
+    return (wild_args, fargs)
+
+  macro "@" id:ident args:binder* "=" bod:term ";" rest:term : term =>
+    do
+    let mut (wild_args, fargs) ← parsebinders args
 
     let mut ftag : Lean.TSyntax `term ← fargs.foldrM
       (fun arg acc => do return ← `($arg -> $acc))
@@ -557,7 +562,31 @@ section notations
 
     ftag :=  ← wild_args.foldrM
       (fun x (acc : Lean.TSyntax `term) => do return ← `( fun {$x : Ty} => $acc))
-      (← `(fun {res:Ty} => Expr.ftag "fun" $ftag))
+      (← `(
+        fun {res:Ty} =>
+        Expr.ftag "fun" $ftag))
+
+    let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
+
+    return (← `(
+    let $id := $ftag
+    let $id := Expr.fn $(Lean.Syntax.mkStrLit id.getId.toString) ($fn)
+    $rest))
+
+  macro "@" id:ident args:binder* ":" ret:braced_term "=" bod:term ";" rest:term : term =>
+    do
+
+    let mut (wild_args, fargs) ← parsebinders args
+
+    let mut ftag : Lean.TSyntax `term ← fargs.foldrM
+      (fun arg acc => do return ← `($arg -> $acc))
+      (← parse_braced_term ret)
+
+    ftag :=  ← wild_args.foldrM
+      (fun x (acc : Lean.TSyntax `term) => do return ← `( fun {$x : Ty} => $acc))
+      (← `( Expr.ftag "fun" $ftag))
+
+    let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
 
     return (← `(
     let $id := $ftag
@@ -565,27 +594,23 @@ section notations
     $rest))
 
   macro "(" a:ident b:ident ")" : term => `(Expr.app $a $b)
-  -- macro "(" a:ident b:term ")" : term => `(Expr.app $a $b)
-  -- macro "(" a:term b:ident ")" : term => `(Expr.app $a $b)
   macro "(" a:term b:term ")" : term => `(Expr.app $a $b)
-  -- macro "(" a:term "(" b:term ")"")" : term => `(Expr.app $a $b)
-  -- macro "(" "(" a:term ")" b:term ")" : term => `(Expr.app $a $b)
 
 
   infixl:56 "•" => Expr.app
 
   macro "[" a:term,* "]" : term => do return ← a.getElems.foldrM (fun x acc => `(Cons $x $acc)) (← `(Nil))
 
-
-
 end notations
 
 
 #check
 
-
+  let f := lam (x:int) => x;
 
   @len (l :  int) k = (len • k • (#0));
+
+  @len (l:int) k : (int) = (len • k • (#0));
 
   len
 

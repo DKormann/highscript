@@ -31,16 +31,18 @@ def main :=
       #Nil: **
     };
 
-
-
   @rootTerm n = (Term n n);
 
-  @lin (a:int) (b: list int) rest =
+  @lin (a:int) (b: list int) (rest:int) =
 
-   ~b{
-    #Nil : rest
-    #Cons h t : #22
-  }as int;
+   ~b {
+
+      #Nil : rest
+      #Cons h t :
+        !cont = (lin • a • t • rest) as int;
+        #22
+
+    }as int;
 
 
   let iff {u:Ty} t (a:Expr u) (b:Expr u) :=
