@@ -297,7 +297,7 @@ mutual
       | .nsup => s!"&\{{a.repr} {b.repr}}"
       | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} {b.repr}"
       | .lett v => s!"! {v.name} = {a.repr}\n{b.repr}"
-    | .iff c p t f => s!"~({c.repr}) \n0: {f.repr}\n{p.name}: {t.repr}"
+    | .iff c p t f => s!"~({c.repr})\{\n0: {f.repr}\n{p.name}: {t.repr}\n}"
     | @Expr.data a n i => s!"#{(a.adt.get n).name} \{{i.repr}}"
     | .mmatch x s m => s!"~({x.repr}) {" ".intercalate (s.map ("!"++TypedVar.name . ))} \{{m.repr}}"
 
@@ -487,7 +487,6 @@ section notations
   macro:50 v:term:50 "as" t:term:51 : term => `(Expr.astype $t $v)
   macro:50 "var" n:ident ":" t:term:50 ";" bod:term  : term => `(let $n :Var $t := newVar $(Lean.quote (n.getId.toString)); $bod)
 
-
   macro:50 "!" "&" l:num "{" a:ident "," b:ident  "}" "=" c:term:50 ";" d:term:50 : term =>
     `(
       let $a := newVar $(Lean.quote (a.getId.toString));
@@ -496,6 +495,8 @@ section notations
       let $a := Expr.var $a;
       let $b := Expr.var $b;
       $d))
+
+  macro:50 "!" "&" "{" a:ident "," b:ident  "}" "=" c:term:50 ";" d:term:50 : term => `(!& 0{$a, $b} = $c; $d)
 
   macro:50 "!" vr:ident "=" val:term:50 ";" bod:term:50 : term =>
     `(
@@ -515,7 +516,13 @@ section notations
   macro:50 a:term:50 "-" b:term:51 : term => `(Expr.arith "-" $a $b)
   macro:60 a:term:60 "*" b:term:61 : term => `(Expr.arith "*" $a $b)
   macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
+  macro:60 a:term:60 "==" b:term:61 : term => `(Expr.arith "==" $a $b)
+  macro:60 a:term:60 "!=" b:term:61 : term => `(Expr.arith "!=" $a $b)
   macro:60 "**" :term => `(Expr.eraser)
+
+  instance : OfNat (Expr int) x where
+    ofNat := Expr.int x
+
 
   macro "if" c:term "then" t:term "else" f:term : term =>
   `(Expr.iff $c (newVar "_currentifcond") $t $f)
@@ -524,7 +531,7 @@ section notations
   `(
     let vr := newVar $(Lean.quote (cond.getId.toString));
     Expr.iff $c vr (let $cond := Expr.var vr;$t) $f
-    )
+  )
 
 
 
@@ -580,7 +587,7 @@ section notations
       (fun x (acc : Lean.TSyntax `term) => do return ← `( fun {$x : Ty} => $acc))
       (← `(
         fun {res:Ty} =>
-        Expr.ftag "fun" $ftag))
+        Expr.ftag $(Lean.quote (id.getId.toString)) $ftag))
 
     let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
 
@@ -600,7 +607,7 @@ section notations
 
     ftag :=  ← wild_args.foldrM
       (fun x (acc : Lean.TSyntax `term) => do return ← `( fun {$x : Ty} => $acc))
-      (← `( Expr.ftag "fun" $ftag))
+      (← `( Expr.ftag $(Lean.quote (id.getId.toString)) $ftag))
 
     let fn := (← args.foldrM (fun arg acc => `(lam $arg => $acc)) (← `($bod)))
 

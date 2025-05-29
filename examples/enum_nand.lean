@@ -145,12 +145,82 @@ import HighScript
 
 set_option linter.unusedVariables false
 
+def map {a b} :Expr ((a->b) -> list a -> list b ) :=
+  let map := Expr.ftag "map" ((a->b) -> list a -> list b);
+  Expr.fn "map"
+  (lam f l => ~l {
+    #Nil: []
+    #Cons h t: Cons (f • h) (map • f • t)
+  })
 
 def main :=
 
   @not a = (#1 - a);
-  @and a b = (a * b);
-  @nand a b = not • (a * b);
+  @and a b = if a then b else #0;
+  @nand a b = not • (and • a • b);
+  @or a b = if a then #1 else b;
+  @xor a b = (a != b);
 
 
-  runmain $ and • #0 • #1
+  data term {
+    #Leaf x:int
+    #Node a:self b:self
+  }
+
+  data maybe t {
+    #Some x:t
+    #None
+  }
+
+  let terms := list term;
+
+  @sublayer (head: term) (secondary: list term) (rest : list term) =
+  ~secondary {
+    #Nil: rest
+    #Cons h t : Cons (Node h head) (sublayer • h • t • rest)
+  };
+
+  @layer (srcs: list term) =
+    ~srcs {
+      #Nil: []
+      #Cons h tail: sublayer • h • srcs • (layer • tail)
+    };
+
+  @concat (a:terms) (b:terms) =
+    ~ a {
+      #Nil: b
+      #Cons h t: Cons h (concat • t • b)
+    };
+
+  @makenets srcs : terms =
+    ! n = layer • srcs;
+    concat • n • (makenets n);
+
+  @rollterm (ls : list term) : term =
+    ~ls{ #Nil: ** #Cons h t: &77 {h, rollterm • t} };
+
+  @rollargs (ls : list term) =
+    ~ ls { #Nil: ** #Cons h t: &78 {h, rollargs • t} };
+
+  @allnets : term =
+    ! srcs = map • (lam x => Leaf x) • [0, 1, 2];
+    rollterm • (makenets • srcs);
+
+  @get (l: list int) (n: int) : int =
+    ~l{
+      #Nil: #0
+      #Cons h t: if n == 0 then h else get • t • (n - (1 as int))
+    };
+
+  @app (net : term) (args: list int) : int = ~net{
+    #Leaf x: get • args • x
+    #Node a b: nand • (app • a • args) • (app • b • args)
+  };
+
+
+
+  @t a (b:int) c : int = nand • a • c;
+
+
+  -- runmain $ and • #0 • #1
+  runmain allnets
