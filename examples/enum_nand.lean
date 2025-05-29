@@ -1,5 +1,146 @@
 
+-- n this with -C1 doesnt terminate otherwise
+-- // search over circuits to replicate a given truth function with nand gates only
+-- // generate all circuits (nets) as superposition with label 77
+-- // generate all possible arguments as superposition with label 78
+
+-- data list{#Nil #Cons{a b}}
+
+-- @and(a b) = ~a{0:0 p:b }
+-- @nand(a b) = (- 1 @and(a b))
+-- @or(a b) = ~a !b{ 0: b p: 1 }
+-- @not(a) = (- 1 a)
+-- @xor(a b) = (!= a b)
+
+-- @leaf(x) = λnode λleaf (leaf x)
+-- @node(a b) = λnode λleaf
+--   !&{n1 node} = node
+--   !&{n2 node} = node
+--   !&{l1 l2} = leaf
+--   (node (a n1 l1) (b n2 l2))
+
+-- @sublayer(head secondary rest) = ~secondary !rest{
+--   #Nil: rest
+--   #Cons{h t}:
+--     ! &{h1 h2} = head
+--     #Cons{
+--       @node(h h1)
+--       @sublayer(h2 t rest)}
+-- }
+
+-- // generate list of new nodes given last nodes
+-- @layer(srcs) =
+--   !&{s1 s2} = srcs
+--   ~s1 {
+--     #Nil: []
+--     #Cons{h tail}:
+--       @sublayer(h s2 @layer(tail))
+--   }
+
+
+-- // generate list of all nets
+-- @makenets(srcs) = !&{n1 n2} = @layer(srcs) @concat(n1 @makenets(n2))
+
+-- // generate superposition of all nets
+-- @allnets = λa λb λc
+--   !srcs = @map(λx @leaf(x) [a b c])
+--   @roll(77 @makenets(srcs))
+
+
+-- @map(fn ls) = ~ls{ #Nil:[] #Cons{h t}: ! &{f1 f2} = fn #Cons{(f1 h) @map(f2 t)}}
+
+-- @when(c t) = ~ c {0: * p: t}
+
+-- @concat(a b) = ~a !b{#Nil: b #Cons{h t}: #Cons{h @concat(t b)}}
+-- @slice(n x) = ~n{
+--   0: [] p: ~x{
+--     #Nil: []
+--     #Cons{h t}: #Cons{h @slice(p t)}
+--   }
+-- }
+
+-- data maybe{#Some{x} #None}
+
+
+-- // generate all permutations of truth values
+-- @permute(n) = ~n{
+--   0: [[]]
+--   p:
+--     !&0 {p1 p2} = @map(λx #Cons{&0{0 1} x} @permute(p))
+--     @concat(p1 p2)
+-- }
+
+-- @do_permute(n) = @roll(78 @concat(@map(λx #Some{x} @permute(n)) [#None]))
+
+-- @roll(&L ls) = ~ls{#Nil: * #Cons{h t}: &L{h @roll(&L t)}}
+-- @supslice(&L n sup) = ~n{0: * p: !&L{a b} = sup &L{a @supslice(&L b p)}}
+-- @unroll(&L sup) = !&L{a b} = sup #Cons{a @unroll(&L b)}
+
+
+-- @apply(fn args) = ~args !fn{
+--   #Nil: fn
+--   #Cons{h t}: @apply((fn h) t)
+-- }
+
+-- @maybe_map(fn mb) = ~mb{
+--   #None: #None
+--   #Some{v}: #Some{(fn v)}
+-- }
+
+-- @allcollapse(x) =
+--   ! &78{head tail} = x
+--   ~head{
+--     #Some{h}: ~h{
+--       0: 0
+--       p: @allcollapse(tail)
+--     }
+--     #None: 1
+--   }
+
+-- @nandnet(net) = (net
+--   (λa λb @nand(a b))
+--   λleaf leaf)
+
+-- data show{#Nand{a b}}
+
+
+-- @join(slist) = ~slist{
+--   #Nil: ""
+--   #Cons{h t}: @concat(h @join(t))}
+
+-- @show_net(net) =
+--   ((net "a" "b" "c")
+--   (λa λb @join(["nand(" a ", " b ")"] ))
+--   λleaf leaf)
+
+
+-- // try different truth functions
+-- @t = λa λb λc  @nand(a c)
+-- @t = λa λb λc  @or(a c)
+-- @t = λa λb λc  @and(a b)
+-- @t = λa λb λc  @and(a @or(b c))
+-- // @t = λa λb λc  @xor(a b)
+
+
+
+-- @main =
+--   !x = @do_permute(3)
+
+--   @show_net(
+--     λa λb λc
+--     @when(
+--       @allcollapse(@maybe_map(
+--         λe
+--           !&{e1 e2} = e
+--           (== @nandnet(@apply(@allnets e1))
+--           @apply(@t e2)) x))
+--       (@allnets a b c)
+--   ))
+
+
+
 -- this is work in progress of a simple enumerator
+
 import HighScript
 
 set_option linter.unusedVariables false
@@ -7,49 +148,9 @@ set_option linter.unusedVariables false
 
 def main :=
 
-  data bool{
-    #True
-    #False
-  }
-
-  data term {
-    #Term bod:int id:int
-  }
-
-  @nand = (lam a => lam b => (#1 - (a * b)));
-
-  @nand a b = Cons a $ Cons b $ Nil as list int;
-
-  @nand a b = [a, b as int];
-
-  @sup = &{#22, #33};
-
-  @l2sup : (list int) -> int;
-  @l2sup ls =
-    ~(ls as list int) {
-      #Cons h t: &{(h as int), l2sup • t}
-      #Nil: **
-    };
-
-  @rootTerm n = (Term n n);
-
-  @lin (a:int) (b: list int) (rest:int) =
-
-   ~b {
-
-      #Nil : rest
-      #Cons h t :
-        !cont = (lin • a • t • rest) as int;
-        #22
-
-    }as int;
+  @not a = (#1 - a);
+  @and a b = (a * b);
+  @nand a b = not • (a * b);
 
 
-  let iff {u:Ty} t (a:Expr u) (b:Expr u) :=
-    ~ (t as bool) {
-      #True : a
-      #False : b
-    };
-
-
-  runmain $ iff False (rootTerm #10) (rootTerm #20)
+  runmain $ and • #0 • #1

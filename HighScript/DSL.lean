@@ -126,6 +126,7 @@ mutual
   inductive Expr : Ty → Type
     | nullary : NullaryOp b -> Expr b
     | unary : UnaryOp a b -> Expr a -> Expr b
+    | iff : Expr int -> Var int -> Expr b ->  Expr b -> Expr b
     | binary : BinaryOp a b c -> Expr a -> Expr b -> Expr c
     | data : {a:NamedAdt} -> (n:Nat) -> Instance a (a.adt.get n).v -> Expr a.Ty
     | mmatch : {a:NamedAdt} -> Expr a.Ty -> (shared: List TypedVar := []) -> (css : Match a (a.adt.variants.map (NamedVariant.name)) (a.adt.variants.map (NamedVariant.v)) res) -> Expr res
@@ -246,6 +247,7 @@ def parse_braced_term (arg: Lean.TSyntax `braced_term) : Lean.MacroM (Lean.TSynt
   | `(braced_term| ($x:term)) => return x
   | _ => Lean.Macro.throwUnsupported
 
+
 macro "~" arg:braced_term "{" arms:match_arm* "}" : term => do
   let mut dat := #[]
   for arm in arms do
@@ -294,9 +296,11 @@ mutual
       | .sup n => s!"&{n}\{{a.repr} {b.repr}}"
       | .nsup => s!"&\{{a.repr} {b.repr}}"
       | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} {b.repr}"
-      | .lett v => s!"! {v.name} = {a.repr} {b.repr}"
+      | .lett v => s!"! {v.name} = {a.repr}\n{b.repr}"
+    | .iff c p t f => s!"~({c.repr}) \n0: {f.repr}\n{p.name}: {t.repr}"
     | @Expr.data a n i => s!"#{(a.adt.get n).name} \{{i.repr}}"
     | .mmatch x s m => s!"~({x.repr}) {" ".intercalate (s.map ("!"++TypedVar.name . ))} \{{m.repr}}"
+
 
 
   def Adt.compile (a:Adt) : String :=
@@ -513,6 +517,17 @@ section notations
   macro:60 a:term:60 "/" b:term:61 : term => `(Expr.arith "/" $a $b)
   macro:60 "**" :term => `(Expr.eraser)
 
+  macro "if" c:term "then" t:term "else" f:term : term =>
+  `(Expr.iff $c (newVar "_currentifcond") $t $f)
+
+  macro "if" cond:ident ":=" c:term "then" t:term "else" f:term : term =>
+  `(
+    let vr := newVar $(Lean.quote (cond.getId.toString));
+    Expr.iff $c vr (let $cond := Expr.var vr;$t) $f
+    )
+
+
+
   macro:50 "lam" xs:binder* "=>" body:term : term =>
     (do
     return ← xs.foldrM (fun x acc => do
@@ -536,6 +551,7 @@ section notations
 
   declare_syntax_cat funterm
   syntax ":" ident : funterm
+
 
   abbrev term := Lean.TSyntax `term
 
