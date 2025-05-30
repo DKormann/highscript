@@ -88,14 +88,17 @@ def newVar (name:String) : Var t := ⟨name⟩
 
 
 structure TypedVar where
-  name: String
   t: Ty
-  v: Var t
+  name: String
+
+
 
 instance : BEq TypedVar where
   beq a b := a.name == b.name && a.t == b.t
 
-def TypedVar.from {t:Ty} (v: Var t) : TypedVar := { name := v.name, v := v }
+def TypedVar.var (x:TypedVar) := @Var.mk x.t x.name
+
+def TypedVar.from {t:Ty} (v: Var t) := TypedVar.mk t v.name
 
 def Adt.variants : (self:Adt) -> List NamedVariant
   | .nil => []
@@ -126,7 +129,7 @@ mutual
   inductive Expr : Ty → Type
     | nullary : NullaryOp b -> Expr b
     | unary : UnaryOp a b -> Expr a -> Expr b
-    | iff : Expr int -> Var int -> Expr b ->  Expr b -> Expr b
+    | iff : Expr int -> (shared:List TypedVar:= []) -> Var int -> Expr b ->  Expr b -> Expr b
     | binary : BinaryOp a b c -> Expr a -> Expr b -> Expr c
     | data : {a:NamedAdt} -> (n:Nat) -> Instance a (a.adt.get n).v -> Expr a.Ty
     | mmatch : {a:NamedAdt} -> Expr a.Ty -> (shared: List TypedVar := []) -> (css : Match a (a.adt.variants.map (NamedVariant.name)) (a.adt.variants.map (NamedVariant.v)) res) -> Expr res
@@ -297,8 +300,8 @@ mutual
       | .nsup => s!"&\{{a.repr} {b.repr}}"
       | .dub n x y => s!"!&{n}\{{x.name} {y.name}}={a.repr} {b.repr}"
       | .lett v => s!"! {v.name} = {a.repr}\n{b.repr}"
-    | .iff c p t f => s!"~({c.repr})\{\n0: {f.repr}\n{p.name}: {t.repr}\n}"
-    | @Expr.data a n i => s!"#{(a.adt.get n).name} \{{i.repr}}"
+    | .iff c sd p t f => s!"~({c.repr}) {" ".intercalate (sd.map ("!"++TypedVar.name .))} \{\n0: {f.repr}\n{p.name}: {t.repr}\n}"
+    | @Expr.data a n i => s!"#{(a.adt.get n).name}  \{{i.repr}}"
     | .mmatch x s m => s!"~({x.repr}) {" ".intercalate (s.map ("!"++TypedVar.name . ))} \{{m.repr}}"
 
 
@@ -335,11 +338,18 @@ end
 
 mutual
 
+  def Var.replace {t:Ty} (x:Var t) (v v': String): Var t :=
+    if x.name == v then (.mk v') else x
+
+  def TypedVar.replace (x:TypedVar) (v v':String): TypedVar :=
+    if x.name == v then (.mk x.t v') else x
+
   def Expr.replace (v v':String): (e:Expr b) -> Expr b
-    | .var vr => .var (if vr.name == v then newVar v' else vr)
+    | .var vr => .var $ vr.replace v v'
     | .lam a e => .lam a (if a.name == v then e else e.replace v v')
     | .unary op e => .unary op (e.replace v v')
     | .binary op a b => .binary op (a.replace v v') (b.replace v v')
+    | .iff c sd vr t f => .iff (c.replace v v') (sd.map (fun x => x.replace v v')) (vr.replace v v') (t.replace v v') (f.replace v v')
     | .data n i => .data n $ i.replace v v'
     | .mmatch x s m => .mmatch (x.replace v v') s m
     | k => k
@@ -364,7 +374,7 @@ mutual
     | [] => fn a b
     | c::cs =>
       let (c', c'') := (c.name ++ "1", c.name ++ "2")
-      Expr.dub 0 (newVar c') (newVar c'') (Expr.var $ c.v)
+      Expr.dub 0 (newVar c') (newVar c'') (Expr.var $ c.var)
       $ .resolve cs (a.replace c.name c') (b.replace c.name c'') fn
 
   def Expr.linearize : (e:Expr b) -> Expr b × List TypedVar
@@ -380,6 +390,30 @@ mutual
       let (b, bs) := b.linearize
       let fn := fun a b => Expr.binary op a b
       (.resolve (as.filter (bs.contains ·)) a b fn, bs ++ as.filter (! bs.contains ·))
+
+    | .iff c sd v t f =>
+      let (c,cs) := c.linearize
+      let (t,ts) := t.linearize
+      let (f,fs) := f.linearize
+
+      let ts := ts.filter (fun x => .from v != x)
+      let tfcoll := ts.filter (fs.contains)
+      let sd := sd ++ tfcoll.filter (!sd.contains .)
+      let tfs := (ts ++ fs).filter (!sd.contains .)
+      let collisions := cs.filter (tfs.contains)
+      let collisions := collisions.map (fun v => (v, TypedVar.mk v.t (v.name ++ "1"), TypedVar.mk v.t (v.name ++ "2")))
+      let (c, sd, t, f) :=
+        collisions.foldl
+          (fun (c,sd,t,f) (v,v',v'') =>
+          (
+            c.replace v.name v'.name,
+            sd.map (TypedVar.replace . v.name v''.name),
+            t.replace v.name v''.name,
+            f.replace v.name v''.name,
+          ))
+          (c,sd,t,f)
+
+      sorry
     | .data n i =>
       let (i, xs, rtd) := i.linearize
       let ex := rtd.foldl (fun x c =>
@@ -460,7 +494,9 @@ instance: Repr HVM_programm where reprPrec prg _ := match prg with | .mk s => s
 def compile (e:Expr t) : HVM_programm :=
   let k := e.linearize.fst
   let m := k.collect Std.HashMap.empty
-  .mk $ "\n\n".intercalate m.values
+  let (ds,fs) := m.values.partition (fun x => x.startsWith "data")
+  .mk $ "\n\n".intercalate $ ds ++ fs
+
 
 
 section notations
@@ -625,6 +661,33 @@ section notations
   macro "[" a:term,* "]" : term => do return ← a.getElems.foldrM (fun x acc => `(Cons $x $acc)) (← `(Nil))
 
 end notations
+
+
+def extractinfo{t} : (e:Expr t) -> String
+  | Expr.mmatch a b c => "p"
+  | _ => "nop"
+
+
+#eval
+  data p { #P x:int }
+
+  let s : Expr p := .var $ Var.mk "s";
+
+  let mm :=
+
+  ! s = P 22;
+
+  ~ s {
+    #P x: s
+  };
+
+  mm.linearize
+
+
+#eval
+  ! n = 22;
+  if n == 22 then n else n
+
 
 
 #check

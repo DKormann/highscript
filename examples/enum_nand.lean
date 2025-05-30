@@ -223,4 +223,4 @@ def main :=
 
 
   -- runmain $ and • #0 • #1
-  runmain allnets
+  runmain $ app • allnets • [1, 0, 0]
