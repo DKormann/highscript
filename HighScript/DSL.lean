@@ -413,13 +413,14 @@ mutual
           ))
           (c,sd,t,f)
 
-      sorry
+      .mk (.iff c sd v t f) $ cs ++ tfs.filter (!cs.contains .)
+
     | .data n i =>
       let (i, xs, rtd) := i.linearize
       let ex := rtd.foldl (fun x c =>
         Expr.dub 0
           (newVar (c.name ++ "1"))
-          (newVar (c.name ++ "2")) (.var $ c.v) x) (Expr.data n i)
+          (newVar (c.name ++ "2")) (.var $ c.var) x) (Expr.data n i)
       (ex, xs)
     | .mmatch x s m =>
       let (x, xs) := x.linearize
@@ -430,7 +431,7 @@ mutual
       let ex := collisions.foldl (fun x c =>
         Expr.dub 0
           (newVar (c.name ++ "1"))
-          (newVar (c.name ++ "2")) (.var $ c.v) x) $ Expr.mmatch x (s++os) m
+          (newVar (c.name ++ "2")) (.var $ c.var) x) $ Expr.mmatch x (s++os) m
       (ex, xs ++ rs.filter (! xs.contains ·))
     | k => (k, [])
 
@@ -681,13 +682,13 @@ def extractinfo{t} : (e:Expr t) -> String
     #P x: s
   };
 
-  mm.linearize
+  mm.linearize.fst
 
 
 #eval
   ! n = 22;
-  if n == 22 then n else n
-
+  n + n
+  -- if n == 22 then n else n
 
 
 #check
