@@ -391,29 +391,61 @@ mutual
       let fn := fun a b => Expr.binary op a b
       (.resolve (as.filter (bs.contains ·)) a b fn, bs ++ as.filter (! bs.contains ·))
 
-    | .iff c sd v t f =>
-      let (c,cs) := c.linearize
-      let (t,ts) := t.linearize
-      let (f,fs) := f.linearize
+    -- | .iff c sd v t f =>
+    --   let (c,cs) := c.linearize
+    --   let (t,ts) := t.linearize
+    --   let (f,fs) := f.linearize
 
-      let ts := ts.filter (fun x => .from v != x)
-      let tfcoll := ts.filter (fs.contains)
-      let sd := sd ++ tfcoll.filter (!sd.contains .)
-      let tfs := (ts ++ fs).filter (!sd.contains .)
-      let collisions := cs.filter (tfs.contains)
+    --   let ts := ts.filter (fun x => .from v != x)
+    --   let tfcoll := ts.filter (fs.contains)
+    --   let sd := sd ++ tfcoll.filter (!sd.contains .)
+    --   let tfs := (ts ++ fs).filter (!sd.contains .)
+    --   let collisions := cs.filter (tfs.contains)
+    --   let collisions := collisions.map (fun v => (v, TypedVar.mk v.t (v.name ++ "1"), TypedVar.mk v.t (v.name ++ "2")))
+    --   let (c, sd, t, f) :=
+    --     collisions.foldl
+    --       (fun (c,sd,t,f) (v,v',v'') =>
+    --       (
+    --         c.replace v.name v'.name,
+    --         sd.map (TypedVar.replace . v.name v''.name),
+    --         t.replace v.name v''.name,
+    --         f.replace v.name v''.name,
+    --       ))
+    --       (c,sd,t,f)
+
+    --   .mk (.iff c sd v t f) $ cs ++ tfs.filter (!cs.contains .)
+
+
+    | .iff c sd v t f =>
+      let (c, cs) := c.linearize
+      let (t, ts) := t.linearize
+      let (f, fs) := f.linearize
+
+      let sd := ts.filter (fs.contains ·)
+      let tfs := ts ++ fs.filter (! ts.contains ·)
+
+      let collisions := cs.filter (tfs.contains ·)
       let collisions := collisions.map (fun v => (v, TypedVar.mk v.t (v.name ++ "1"), TypedVar.mk v.t (v.name ++ "2")))
+
       let (c, sd, t, f) :=
         collisions.foldl
-          (fun (c,sd,t,f) (v,v',v'') =>
-          (
-            c.replace v.name v'.name,
-            sd.map (TypedVar.replace . v.name v''.name),
-            t.replace v.name v''.name,
-            f.replace v.name v''.name,
-          ))
-          (c,sd,t,f)
+          (fun (c, sd, t, f) (v, v', v'') =>
+            (
+              c.replace v.name v'.name,
+              sd.map (TypedVar.replace . v.name v''.name),
+              t.replace v.name v''.name,
+              f.replace v.name v''.name,
+            ))
+            (c, sd, t, f)
 
-      .mk (.iff c sd v t f) $ cs ++ tfs.filter (!cs.contains .)
+      let exp := (Expr.iff c sd v t f)
+
+      let exp := collisions.foldl
+        (fun e (v, v', v'') =>
+          Expr.dub 0 (newVar v'.name) (newVar v''.name) (Expr.var $ v.var) e)
+        exp
+
+      .mk exp $ cs ++ tfs.filter (!cs.contains ·)
 
     | .data n i =>
       let (i, xs, rtd) := i.linearize
@@ -497,8 +529,6 @@ def compile (e:Expr t) : HVM_programm :=
   let m := k.collect Std.HashMap.empty
   let (ds,fs) := m.values.partition (fun x => x.startsWith "data")
   .mk $ "\n\n".intercalate $ ds ++ fs
-
-
 
 section notations
 
@@ -670,6 +700,16 @@ section notations
 
 end notations
 
+#eval
+
+  let n : Expr int := .var $ Var.mk "n";
+  (
+    if 1 == 22
+    then n
+    else (n + (1 as int))
+  ).linearize.fst
+
+
 
 def extractinfo{t} : (e:Expr t) -> String
   | Expr.mmatch a b c => "p"
@@ -692,10 +732,6 @@ def extractinfo{t} : (e:Expr t) -> String
   mm.linearize.fst
 
 
-#eval
-  ! n = 22;
-  -- n + n
-  if n == 22 then n else n
 
 
 #check

@@ -209,7 +209,10 @@ def main :=
   @get (l: list int) (n: int) : int =
     ~l{
       #Nil: #0
-      #Cons h t: if n == 0 then h else get • t • (n - (1 as int))
+      #Cons h t:
+        if n == 0
+        then h
+        else get • t • (n - (1 as int))
     };
 
   @app (net : term) (args: list int) : int = ~net{
