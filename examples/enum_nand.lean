@@ -1,5 +1,5 @@
 
--- n this with -C1 doesnt terminate otherwise
+-- // run this with -C1 doesnt terminate otherwise
 -- // search over circuits to replicate a given truth function with nand gates only
 -- // generate all circuits (nets) as superposition with label 77
 -- // generate all possible arguments as superposition with label 78

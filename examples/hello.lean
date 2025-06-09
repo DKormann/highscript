@@ -7,4 +7,4 @@ def main : IO Unit :=
 
   @fn x = add • x • x;
 
-  runmain (fn (#10))
+  runmain (fn • (#10))

@@ -562,15 +562,22 @@ section notations
 
 
   macro "if" c:term "then" t:term "else" f:term : term =>
-  `(Expr.iff $c (newVar "_currentifcond") $t $f)
+  `(Expr.iff $c [] (newVar "_currentifcond") $t $f)
+
+  macro "iff" c:term "then" t:term "else" f:term : term =>
+  `(Expr.iff $c [] (newVar "_currentifcond") $t $f)
 
   macro "if" cond:ident ":=" c:term "then" t:term "else" f:term : term =>
   `(
     let vr := newVar $(Lean.quote (cond.getId.toString));
-    Expr.iff $c vr (let $cond := Expr.var vr;$t) $f
+    Expr.iff $c vr [] (let $cond := Expr.var vr;$t) $f
   )
 
-
+  macro "iff" cond:ident ":=" c:term "then" t:term "else" f:term : term =>
+  `(
+    let vr := newVar $(Lean.quote (cond.getId.toString));
+    Expr.iff $c vr [] (let $cond := Expr.var vr;$t) $f
+  )
 
   macro:50 "lam" xs:binder* "=>" body:term : term =>
     (do
@@ -687,8 +694,8 @@ def extractinfo{t} : (e:Expr t) -> String
 
 #eval
   ! n = 22;
-  n + n
-  -- if n == 22 then n else n
+  -- n + n
+  if n == 22 then n else n
 
 
 #check
