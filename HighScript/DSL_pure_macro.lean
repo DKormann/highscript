@@ -304,8 +304,6 @@ mutual
     | @Expr.data a n i => s!"#{(a.adt.get n).name}  \{{i.repr}}"
     | .mmatch x s m => s!"~({x.repr}) {" ".intercalate (s.map ("!"++TypedVar.name . ))} \{{m.repr}}"
 
-
-
   def Adt.compile (a:Adt) : String :=
     match a with
     | .nil => ""
@@ -391,31 +389,6 @@ mutual
       let fn := fun a b => Expr.binary op a b
       (.resolve (as.filter (bs.contains ·)) a b fn, bs ++ as.filter (! bs.contains ·))
 
-    -- | .iff c sd v t f =>
-    --   let (c,cs) := c.linearize
-    --   let (t,ts) := t.linearize
-    --   let (f,fs) := f.linearize
-
-    --   let ts := ts.filter (fun x => .from v != x)
-    --   let tfcoll := ts.filter (fs.contains)
-    --   let sd := sd ++ tfcoll.filter (!sd.contains .)
-    --   let tfs := (ts ++ fs).filter (!sd.contains .)
-    --   let collisions := cs.filter (tfs.contains)
-    --   let collisions := collisions.map (fun v => (v, TypedVar.mk v.t (v.name ++ "1"), TypedVar.mk v.t (v.name ++ "2")))
-    --   let (c, sd, t, f) :=
-    --     collisions.foldl
-    --       (fun (c,sd,t,f) (v,v',v'') =>
-    --       (
-    --         c.replace v.name v'.name,
-    --         sd.map (TypedVar.replace . v.name v''.name),
-    --         t.replace v.name v''.name,
-    --         f.replace v.name v''.name,
-    --       ))
-    --       (c,sd,t,f)
-
-    --   .mk (.iff c sd v t f) $ cs ++ tfs.filter (!cs.contains .)
-
-
     | .iff c sd v t f =>
       let (c, cs) := c.linearize
       let (t, ts) := t.linearize
@@ -492,9 +465,6 @@ mutual
       let (x, xs) := x.linearize
       let (rest, rs, os) := rest.linearize
       let collisions := xs.filter (rs.contains ·)
-      -- let (x, rest) := collisions.foldl
-      --   (fun (x, r) c => (x.replace c.name $ c.name ++ "1", r.replace c.name $ c.name ++ "2"))
-      --   (x,rest)
       (.cons v x rest, xs ++ rs.filter (! xs.contains ·), collisions ++ os.filter (! xs.contains ·))
 
   def Expr.collect (m:Std.HashMap String String) : (e:Expr t) -> Std.HashMap String String
