@@ -1,0 +1,5 @@
+{"log":
+ [{"message":
+   ".> LEAN_PATH=././.lake/build/lib/lean /Users/peergynt/.elan/toolchains/leanprover--lean4---v4.18.0/bin/lean ././././HighScript/DSL.lean -R ./././. -o ././.lake/build/lib/lean/HighScript/DSL.olean -i ././.lake/build/lib/lean/HighScript/DSL.ilean -c ././.lake/build/ir/HighScript/DSL.c --json",
+   "level": "trace"}],
+ "depHash": "2587010210447812044"}
