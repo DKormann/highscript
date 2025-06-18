@@ -244,101 +244,22 @@ macro "foreach" terms:ident* "end" :term => do
 
 
 declare_syntax_cat high_data
-syntax "data" ident ident* "{" construction* "}" term : high_data
+syntax "data" ident ident* "{" construction* "}" : high_data
 
+syntax high_data high_expr : high_expr
 
+syntax "unquote" term: high_expr
 
-macro "data" name:ident targs:ident* "{" arms:construction* "}" rest:term : term => do
-    let mut ctrsdata := #[]
-    for ctr in arms do
-      match ctr with
-        | `(construction| #$ctrname $args*) =>
-          let mut arglist := #[]
-          for arg in args do
-            match arg with
-            | `(typed_var| $arg:ident : $ty:ident) => arglist := arglist.push (arg, ty)
-            | _ => Lean.Macro.throwUnsupported
-          ctrsdata := ctrsdata.push (ctrname, arglist)
-        | `(construction | #$ctrname) => ctrsdata := ctrsdata.push (ctrname, #[])
-        | _ => Lean.Macro.throwUnsupported
+syntax "test_macroData" high_data high_expr : term
 
-    ctrsdata := ctrsdata.insertionSort (fun (a, _) (b, _) => a.getId.toString < b.getId.toString)
-
-    let ctrsTy : Array $ Lean.TSyntax `term ← ctrsdata.mapM (fun x => do
-      let dfields ←  x.snd.mapM (fun f => if f.snd.getId.toString == "self" then `(none) else `(some $f.snd))
-      let t : Lean.TSyntax `term ← `(Vec.mk $(Lean.quote x.fst.getId.toString) [$[$dfields],*] );
-      return t
-    )
-
-    let fulladt ← targs.foldlM (fun (a c) => `( $a $c )) (← `(adt))
-    let tyFn ← targs.foldrM (fun (c a) => `(fun ($c :Ty) => $a )) (← `(Ty.adt $fulladt))
-
-    let mut adtFn  ← `(Vec.mk $(Lean.quote name.getId.toString) [$[$ctrsTy],*])
-    for targ in targs do adtFn ← `(fun ($targ :Ty) => $adtFn)
-
-    let mut res := rest
-
-    for ( (ctag, cargs) , n) in ctrsdata.zipIdx do
-      let fulladt ← targs.foldlM (fun (a c) => `( $a $c )) (← `(adt))
-      let fullTy ← targs.foldlM (fun (a c) => `( $a $c )) (← `($name))
-      let inst ← cargs.foldrM (fun (c a) => `(Instance.cons $c.fst $a) ) (← `(Instance.nil $(Lean.quote ctag.getId.toString)))
-      let mut ctrFn ← `(
-        let adt := $fulladt;
-        let inst : Instance adt (adt.get $(Lean.Syntax.mkNatLit n)) := $inst;
-        let ctr : Expr $fullTy := Expr.data adt $(Lean.Syntax.mkNatLit n) inst;
-        ctr
-      );
-
-      for arg in cargs.reverse do ctrFn ← `(fun ($arg.fst : Expr $(← if arg.snd.getId.toString == "self" then `($fullTy) else `($arg.snd)) ) => $ctrFn)
-      for arg in targs.reverse do ctrFn ← `(fun {$arg :Ty} => $ctrFn)
-
-      res ← `( let $ctag := $ctrFn; $res)
-
-    res ← `(
-      let adt := $adtFn;
-      let $name := $tyFn;
-      $res)
-
-    return res
-
-#check
-  data list t {#pair a:t b:self #nil}
-  pair (.nat 22) nil
-
-
--- partial def elabDataTerm : Lean.Syntax -> TermElabM _Expr
---   | `(high_data| data $name:ident $targs:ident* { $arms:construction* } $rest:term)  => do
---     let val ← (mkAppM ``Vec.mk #[
---       Lean.mkStrLit name.getId.toString,
---       ← mkListLit (Lean.mkConst ``Variant []) $
---         ← arms.toList.mapM (fun (v:Lean.TSyntax `high_data_variant) => do return ← elabDataVariantTerm v)])
-
---     withLetDecl name.getId (Lean.mkConst ``Adt) val fun _ => do
---       let stx ← `(let $(Lean.mkIdent name.getId) : Adt := $(← Term.exprToSyntax val); $rest)
---       Term.elabTerm stx none
---   | _ => throwUnsupportedSyntax
-
--- elab "test_elabData" v:high_data rest:term : term => do return ← elabDataTerm v rest
-
-
-
-
-syntax:10 (name := lxor) term:10 " LXOR " term:11 : term
-
-def lxorImpl : Lean.Syntax -> Lean.MacroM Lean.Syntax
-  | `($l:term LXOR $r:term) => `(!$l && $r) -- we can use the quotation mechanism to create `Syntax` in macros
-  | _ => Lean.Macro.throwUnsupported
-
-
-
-
-syntax "macroinvoke" high_expr : high_expr
-
-declare_syntax_cat high_match
 
 partial def elabExpr : Lean.Syntax → TermElabM _Expr
 
-  | `(high_expr| macroinvoke $x:high_expr) => do Term.elabTerm (← `(myXmacro $x)) none
+  | `(high_expr| unquote $x:term) => Term.elabTerm x none
+
+  | `(high_expr| $dat:high_data $rest:high_expr ) => do
+    let dat := Term.elabTerm (← `( test_macroData $dat $rest)) none
+    dat
   | `(high_expr| $l:high_lit) => do
     let l ← elabLit l
     mkAppM ``Expr.lit #[l]
@@ -372,20 +293,93 @@ partial def elabExpr : Lean.Syntax → TermElabM _Expr
     let var ← mkAppM ``Var.typed #[τ, Lean.mkStrLit x.getId.toString]
     mkAppM ``Expr.var #[var]
 
-  -- | `(high_expr| $dat:high_data $rest:high_expr ) => do
-  --   return (← elabDataTerm dat (← elabExpr rest))
-
   | `(high_expr| ($e:high_expr)) => do elabExpr e
-
 
   | _ => throwUnsupportedSyntax
 
+def nt := Ty.nat
+def n22 := Expr.nat 22
+
 elab "test_elabExpr " e:high_expr : term => elabExpr e
 
-macro "myXmacro" x:high_expr : term => `(test_elabExpr $x)
+
+-- macro "test_macroData" dat:high_data rest:high_expr : term => do
+macro_rules
+  | `(test_macroData $dat:high_data $rest:high_expr) =>
+    match dat with
+    |`(high_data| data $name:ident $targs:ident* { $arms:construction*} ) => do
 
 
-#eval test_elabExpr macroinvoke 22
+      let mut ctrsdata := #[]
+      for ctr in arms do
+        match ctr with
+          | `(construction| #$ctrname $args*) =>
+            let mut arglist := #[]
+            for arg in args do
+              match arg with
+              | `(typed_var| $arg:ident : $ty:ident) => arglist := arglist.push (arg, ty)
+              | _ => Lean.Macro.throwUnsupported
+            ctrsdata := ctrsdata.push (ctrname, arglist)
+          | `(construction | #$ctrname) => ctrsdata := ctrsdata.push (ctrname, #[])
+          | _ => Lean.Macro.throwUnsupported
+
+      ctrsdata := ctrsdata.insertionSort (fun (a, _) (b, _) => a.getId.toString < b.getId.toString)
+
+      let ctrsTy : Array $ Lean.TSyntax `term ← ctrsdata.mapM (fun x => do
+        let dfields ←  x.snd.mapM (fun f => if f.snd.getId.toString == "self" then `(none) else `(some $f.snd))
+        let t : Lean.TSyntax `term ← `(Vec.mk $(Lean.quote x.fst.getId.toString) [$[$dfields],*] );
+        return t
+      )
+
+      let fulladt ← targs.foldlM (fun (a c) => `( $a $c )) (← `(adt))
+      let tyFn ← targs.foldrM (fun (c a) => `(fun ($c :Ty) => $a )) (← `(Ty.adt $fulladt))
+
+      let mut adtFn ←
+        targs.foldlM
+        (fun (a c) => `(fun ($a :Ty) => $c))
+        (← `(Vec.mk $(Lean.quote name.getId.toString) [$[$ctrsTy],*]))
+
+
+      let mut res ← `( test_elabExpr $rest)
+
+
+      for ( (ctag, cargs) , n) in ctrsdata.zipIdx do
+        let fulladt ← targs.foldlM (fun (a c) => `( $a $c )) (← `(adt))
+        let fullTy ← targs.foldlM (fun (a c) => `( $a $c )) (← `($name))
+        let inst ← cargs.foldrM (fun (c a) => `(Instance.cons $c.fst $a) ) (← `(Instance.nil $(Lean.quote ctag.getId.toString)))
+        let mut ctrFn ← `(
+          let adt := $fulladt;
+          let inst : Instance adt (adt.get $(Lean.Syntax.mkNatLit n)) := $inst;
+          let ctr : Expr $fullTy := Expr.data adt $(Lean.Syntax.mkNatLit n) inst;
+          ctr
+        );
+
+        for arg in cargs.reverse do ctrFn ← `(fun ($arg.fst : Expr $(← if arg.snd.getId.toString == "self" then `($fullTy) else `($arg.snd)) ) => $ctrFn)
+        for arg in targs.reverse do ctrFn ← `(fun {$arg :Ty} => $ctrFn)
+
+        res ← `( let $ctag := $ctrFn; $res)
+
+      res ← `(
+        let adt := $adtFn;
+        let $name := $tyFn;
+        $res)
+
+      return res
+
+    | _ => Lean.Macro.throwUnsupported
+
+
+
+#check test_elabExpr 22
+
+#check test_elabExpr data list t u {#cons a:nat b:bool}  22
+
+#check test_macroData data list {#nil} 22
+
+
+#check
+  test_elabExpr data list t { #cons h:t tail:self #nil }
+  unquote ( cons )
 
 -- #eval test_elabExpr macroinvoke 45
 
