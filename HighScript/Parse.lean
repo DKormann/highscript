@@ -307,8 +307,8 @@ elab "test_elabExpr " e:high_expr : term => elabExpr e
 macro_rules
   | `(test_macroData $dat:high_data $rest:high_expr) =>
     match dat with
+    -- |`(high_data| data $name:ident $targs:ident* { $arms:construction*} ) => do
     |`(high_data| data $name:ident $targs:ident* { $arms:construction*} ) => do
-
 
       let mut ctrsdata := #[]
       for ctr in arms do
@@ -331,11 +331,15 @@ macro_rules
         return t
       )
 
-      let fulladt ← targs.foldlM (fun (a c) => `( $a $c )) (← `(adt))
-      let tyFn ← targs.foldrM (fun (c a) => `(fun ($c :Ty) => $a )) (← `(Ty.adt $fulladt))
+      let fulladt:=
+       ← targs.foldlM (fun (a c) => `( $a $c ))
+        (← `(adt))
+      let tyFn:=
+      --  ← targs.foldrM (fun (c a) => `(fun ($c :Ty) => $a ))
+        (← `(Ty.adt $fulladt))
 
-      let mut adtFn ←
-        targs.foldlM
+      let mut adtFn :=
+      ← targs.foldlM
         (fun (a c) => `(fun ($a :Ty) => $c))
         (← `(Vec.mk $(Lean.quote name.getId.toString) [$[$ctrsTy],*]))
 
@@ -345,7 +349,10 @@ macro_rules
 
       for ( (ctag, cargs) , n) in ctrsdata.zipIdx do
         let fulladt ← targs.foldlM (fun (a c) => `( $a $c )) (← `(adt))
-        let fullTy ← targs.foldlM (fun (a c) => `( $a $c )) (← `($name))
+        -- let fulladt := ← `(adt)
+        -- let fullTy ← targs.foldlM (fun (a c) => `( $a $c )) (← `($name))
+        let fullTy := name
+
         let inst ← cargs.foldrM (fun (c a) => `(Instance.cons $c.fst $a) ) (← `(Instance.nil $(Lean.quote ctag.getId.toString)))
         let mut ctrFn ← `(
           let adt := $fulladt;
@@ -355,11 +362,12 @@ macro_rules
         );
 
         for arg in cargs.reverse do ctrFn ← `(fun ($arg.fst : Expr $(← if arg.snd.getId.toString == "self" then `($fullTy) else `($arg.snd)) ) => $ctrFn)
-        for arg in targs.reverse do ctrFn ← `(fun {$arg :Ty} => $ctrFn)
+        -- for arg in targs.reverse do ctrFn ← `(fun {$arg :Ty} => $ctrFn)
 
         res ← `( let $ctag := $ctrFn; $res)
 
       res ← `(
+        let targs := [$[$targs],*];
         let adt := $adtFn;
         let $name := $tyFn;
         $res)
@@ -369,12 +377,19 @@ macro_rules
     | _ => Lean.Macro.throwUnsupported
 
 
+def t := 11
+def u := 22
 
 #check test_elabExpr 22
+#check test_macroData data list {#nil a:nat} 22
+
+#check test_macroData data list t {#nil} 22
+
+
+#check test_macroData data list t u {#nil} 22
 
 #check test_elabExpr data list t u {#cons a:nat b:bool}  22
 
-#check test_macroData data list {#nil} 22
 
 
 #check
